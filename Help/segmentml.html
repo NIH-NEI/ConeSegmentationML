@@ -1,0 +1,215 @@
+<html>
+<head>
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+<title>Cone Segmentation Utility (Machine Learning edition)</title>
+<style>
+BODY {
+  FONT-FAMILY: Verdana, Arial, sans-serif;
+}
+div {
+	margin: 4px 0px 4px 8px;
+}
+td, th {
+	text-align: left;
+	padding: 2px 12px 2px 16px;
+	border-bottom: 1px solid #E0E0E0;
+}
+h4 {
+	color: #000055;
+}
+th {
+	color: #555555;
+}
+thead th {
+	background-color: #E0E0E0;
+}
+</style>
+</head>
+<body>
+    <table border="0" width="100%" style="background-color:#EEEEEE;">
+        <tr>
+            <td width="120" style="text-align:center; vertical-align:middle;"><img src="../Icons/ConeSegmentationML.png"></td>
+            <td style="text-align:left"><h3>Cone Segmentation Utility, Machine Learning edition.</h3></td>
+        </tr>
+    </table>
+
+    <div style="text-align:right;">
+        <a href="https://nei.nih.gov/intramural/translational-imaging">Tam lab</a>&nbsp;<br />
+        <a href="https://nei.nih.gov/">National Eye Institute</a>&nbsp;<br />
+        <a href="https://www.nih.gov/">National Institutes of Health</a>&nbsp;<br />
+    </div>
+
+    <h4 style="text-align:center;">Segmentation Parameters</h4>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><b>Level-set iterations</b></td>
+                <td>
+                    The default value for this parameter is 200, which works for most cases.
+If the image quality is too bad as to cause cell over-segmentation, please reduce this number.
+Otherwise, increase the value.
+                </td>
+            </tr>
+            <tr>
+                <td><b>Contour length</b></td>
+                <td>
+                    The shortest length of cell contours.
+If a cell contour length is less than this value, then the result is discarded.
+                </td>
+            </tr>
+            <tr>
+                <td><b>Field of view</b></td>
+                <td>
+                    Current AO image's field of view (0.5 .. 3.0).
+                </td>
+            </tr>
+        </tbody>
+     </table>
+
+    <h4 style="text-align:center;">Keyboard Shortcuts and Mouse Operations</h4>
+    <table>
+        <thead>
+            <tr>
+                <th>Key</th>
+                <th>Action</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><b>F1</b></td>
+                <td>Help</td>
+                <td>Display this help screen.</td>
+            </tr>
+            <tr>
+                <td><b>F2</b></td>
+                <td>Toggle Visibility</td>
+                <td>Temporarily switch off/on visibility of segmented cones.
+                Visibility is automatically restored when you open or segment images,
+                as well as open the Settings dialog.</td>
+            </tr>
+            <tr>
+                <td><b>F10</b></td>
+                <td>Reset Image View</td>
+                <td>In the &ldquo;Default&rdquo; mouse mode dragging the mouse changes brighness/contrast
+                of the image. Pressing F10 reverts these changes and resets the image display
+                to default settings. Also helpful if you zoom in/out too much or accidentally rotate
+                the image (with <b>Ctrl</b>+left-dragging), and you want the origional view back.</td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+I</b></td>
+                <td>Toggle Interpolation</td>
+                <td>
+                    Togle pixel interpolation for image zoom. If the interpolation is on, a bicubic
+                    resampling is used. Otherwise, nearest neighbor.
+                </td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+O</b></td>
+                <td>Open</td>
+                <td>Open a Split Image (.tif). You can open multiple images at once.</td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+T</b></td>
+                <td>Contours</td>
+                <td>
+                	Open segmentation results (contour spreadsheets, *.csv). Contours from files
+                	are loaded into currently open images with matching names (without .csv/.tif).
+                </td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+L</b></td>
+                <td>Show data file locations</td>
+                <td>
+                	Displays the &ldquo;Image Data Location&rdquo; box showing full paths to
+                	the currently displayed image, its associated contour spreadsheet in the same directory,
+                	and auto-backup contour spreadsheet. The auto-backup (history) file is updated after
+                	each contour operation, and it is loaded when there is no manually saved spreadsheet
+                	in the image file directory. It prevents your editings from being lost when you
+                	accidentally close the program (or open new images) without saving the data.
+                </td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+G</b></td>
+                <td>Segment</td>
+                <td>Display Cone Segmentation dialog. On this dialog you can adjust segmentation parameters,
+                and choose one or more open images to segment cones on. Note that clicking on the little
+                checkmark &radic; in the table header checks/unchecks all images in the list.</td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+S</b></td>
+                <td>Save</td>
+                <td>Save segmentation results of all open images.</td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+M</b></td>
+                <td>Default</td>
+                <td>Switch to &ldquo;Default&rdquo; mouse mode. In this mode:<br>
+                	&ndash; Mouse wheel (or <b>Ctrl</b>+right-dragging) zooms in and out;<br>
+                	&ndash; Dragging the mouse changes brightness/contrast;<br>
+                	&ndash; <b>Shift</b>+left-dragging (or middle-dragging) scrolls the image.<br>
+                	&ndash; <b>Ctrl</b>+left-dragging (Windows) rotates the image.
+                </td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+C</b></td>
+                <td>Draw</td>
+                <td>
+                    Switch to &ldquo;Draw Cone Contours&rdquo; mouse mode. In this mode:<br>
+                	&ndash; Mouse wheel (or <b>Ctrl</b>+right-dragging) zooms in and out;<br>
+                    &ndash; Dragging the mouse around a cone adds a new contour;<br>
+                	&ndash; <b>Shift</b>+left-dragging (or middle-dragging) scrolls the image.<br>
+                    &ndash; <b>Ctrl</b>+left click (Windows) or <b>Alt</b>+left click (Mac OS X)
+                    on a contour erases the contour.
+                </td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+E</b></td>
+                <td>Edit</td>
+                <td>
+                    Switch to &ldquo;Edit Cone Contours&rdquo; mouse mode. In this mode:<br>
+                	&ndash; Mouse wheel (or <b>Ctrl</b>+right-dragging) zooms in and out;<br>
+                	&ndash; Left click on a contour selects it for editing;<br>
+                	&ndash; When editing, you can edit the edges by left-dragging them;<br>
+                	&ndash; When editing, you can move the entire contour by middle-dragging it by an edge;<br>
+                    &ndash; <b>Ctrl</b>+left click (Windows) or <b>Alt</b>+left click (Mac OS X)
+                    on a contour erases the contour.<br>
+                	&ndash; <b>Shift</b>+left-dragging (or middle-dragging) scrolls the image.
+                </td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+D</b></td>
+                <td>Erase M</td>
+                <td>
+                	Switch to &ldquo;Erase Multiple Cone Contours&rdquo; mouse mode. In this mode:<br>
+                	&ndash; Mouse wheel (or <b>Ctrl</b>+right dragging) zooms in and out;<br>
+                	&ndash; Left-dragging the mouse around an area erases all contours inside this area;<br>
+                	&ndash; <b>Shift</b>+left-dragging (or middle-dragging) scrolls the image.
+                </td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+W</b></td>
+                <td>Erase S</td>
+                <td>
+                	Switch to &ldquo;Erase Single Cone Contour&rdquo; mouse mode. In this mode:<br>
+                	&ndash; Mouse wheel (or <b>Ctrl</b>+right-dragging) zooms in and out;<br>
+                	&ndash; Left-clicking on a contour erases it;<br>
+                	&ndash; <b>Shift</b>+left-dragging (or middle-dragging) scrolls the image.
+                </td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+Z</b></td>
+                <td>Undo</td>
+                <td>Undo the last &ldquo;Draw&rdquo; or &ldquo;Erase&rdquo; operation.</td>
+            </tr>
+        </tbody>
+    </table>
+<p>&nbsp;</p>
+</body>
+</html>
