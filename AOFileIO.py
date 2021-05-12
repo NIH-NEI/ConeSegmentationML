@@ -77,11 +77,15 @@ class ao_fileIO():
                 contour_writer.writerow(contour)
 
     def write_contours(self, dir_name, input_data, suffix='.csv'):
+        cnt = 0
         for (img_name, img, contours) in zip(input_data['image names'], input_data['images'],
                                         input_data['contours']):
+            if len(contours) == 0: continue
             fn = img_name + suffix
             contour_path = os.path.join(dir_name, fn)
             self.write_contour(contour_path, contours, img.GetOrigin(), img.GetSpacing())
+            cnt += 1
+        return cnt
 
 
 

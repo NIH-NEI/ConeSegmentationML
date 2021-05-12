@@ -17,7 +17,7 @@ from AOImageView import MouseOp
 import AOFileIO
 import AOMethod
 import AOSettingsDialog
-from AOSettingsDialog import ao_parameter_dialog
+from AOSettingsDialog import ao_open_dialog, ao_parameter_dialog
 from AOSettingsDialog import ao_progress_dialog, ao_loc_dialog
 from AOSettingsDialog import display_error, display_warning
 import AOConfig as cfg
@@ -213,24 +213,20 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _setup_menu(self):
         self.open_image_act = QtWidgets.QAction('Open...', self, shortcut=QtGui.QKeySequence.Open,
-                                icon=qt_icon('open'),
-                                toolTip='Open image(s)', triggered=self._open_images)
-
-        self.open_contour_act = QtWidgets.QAction('Open Contours...', self, shortcut='Ctrl+T',
-                                icon=qt_icon('open_document1'),
-                                toolTip='Open contours', triggered=self._open_contours)
+                    icon=qt_icon('open'),
+                    toolTip='Open image(s) and (optionally) segmentation results (contours-annotations)',
+                    triggered=self._open_images)
 
         self.save_data_act = QtWidgets.QAction('Save...', self, shortcut=QtGui.QKeySequence.Save,
-                                icon=qt_icon('save'),
-                                toolTip='Save segmentation results (contours)',
-                                triggered=self._save_data)
+                    icon=qt_icon('save'),
+                    toolTip='Save segmentation results (contours-annotations)',
+                    triggered=self._save_data)
 
         quit = QtWidgets.QAction('Exit', self, shortcut=QtGui.QKeySequence.Quit,
-                                 toolTip="Quit the application", triggered=self._quit)
+                     toolTip="Quit the application", triggered=self._quit)
 
         file_menu = self.menuBar().addMenu("&File")
         file_menu.addAction(self.open_image_act)
-        file_menu.addAction(self.open_contour_act)
         file_menu.addAction(self.save_data_act)
         file_menu.addSeparator()
         file_menu.addAction(quit)
@@ -295,14 +291,6 @@ class MainWindow(QtWidgets.QMainWindow):
         settings_bar.setToolButtonStyle(QtCore.Qt.ToolButtonTextUnderIcon);
         settings_bar.addAction(self.open_image_act)
         
-        open_contour_button = QtWidgets.QToolButton()
-        open_contour_button.setToolTip("Open segmentation results (contours)")
-        open_contour_button.setIcon(qt_icon('open_document1'))
-        open_contour_button.setText("Contours")
-        open_contour_button.setToolButtonStyle(QtCore.Qt.ToolButtonTextUnderIcon)
-        open_contour_button.clicked.connect(self._open_contours)
-        settings_bar.addWidget(open_contour_button)
-
         settings_bar.addAction(self.save_data_act)
         settings_bar.addSeparator()
         
@@ -399,29 +387,29 @@ class MainWindow(QtWidgets.QMainWindow):
         helpWindow.move(geom.width() * 20 // 100, geom.height() * 14 // 100)
         
         helpWindow.showNormal()
-
-        # self.setMinimumSize(geom.width()*60/100, geom.height()*65/100)
-    
     #
     def _open_images(self):
-        file_dialog = QtWidgets.QFileDialog(self)
-        file_dialog.setNameFilters(["Images (*.tif)"])
-        file_dialog.setNameFilter("Images (*.tif)")
-        file_dialog.setWindowTitle('Open images')
-        file_dialog.setFileMode(QtWidgets.QFileDialog.ExistingFiles)
-        file_dialog.setWindowFilePath(QtCore.QDir.homePath())
-        file_dialog.setDirectory(self.loadDir)
-        file_dialog.exec()
-
-        img_filenames = file_dialog.selectedFiles()
-        if len(img_filenames) > 0:
-            self.saveDir = self.loadDir = file_dialog.directory()
+        dlg = ao_open_dialog(self, self.hist)
+        try:
+            dlg.loadDir = self.loadDir.canonicalPath()
+            dlg.annDir = self.saveDir.canonicalPath()
+            dlg.setCheckedImages(self._input_data['image file paths'])
+        except Exception:
+            pass
+        rc = dlg.exec_()
+        if not rc: return
+        img_list = dlg.getImageList()
+        ann_list = dlg.getAnnotationsList()
+        no_ann = dlg.isNoAnnotations()
+        if len(img_list) > 0:
+            self.loadDir = QtCore.QDir(dlg.loadDir)
+            self.saveDir = self.loadDir if no_ann else QtCore.QDir(dlg.annDir)
             self.saveState()
-        filter = file_dialog.selectedNameFilter()
-        self._open_image_list(img_filenames)
+            self._open_image_list(img_list, ann_list, no_ann)
     #
-    def _open_image_list(self, img_filenames):
+    def _open_image_list(self, img_filenames, ann_filenames=None, no_ann=False):
         img_dir = None
+        err_files = []
         if len(img_filenames) is not 0:
             self._initialize_input_data()
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
@@ -443,11 +431,25 @@ class MainWindow(QtWidgets.QMainWindow):
                 local_file_name = self.hist.get_local_file(img_name)
 
                 contour_pts = []
-                # Read history first as it may contain more up to date info
-                if os.path.isfile(history_file_name):
-                    contour_pts = self._file_io.read_contours(history_file_name)
-                elif os.path.isfile(local_file_name):
-                    contour_pts = self._file_io.read_contours(local_file_name)
+                
+                if not no_ann:
+                    if not ann_filenames is None:
+                        user_file_name = ann_filenames[idx]
+                        # Read user-specified annotations file first
+                        if user_file_name and os.path.isfile(user_file_name):
+                            try:
+                                contour_pts = self._file_io.read_contours(user_file_name, ignore_errors=False)
+                            except Exception:
+                                err_files.append(user_file_name)
+                        elif os.path.isfile(history_file_name):
+                            contour_pts = self._file_io.read_contours(history_file_name)
+                    else:
+                        # Read history first as it may contain more up to date info
+                        if os.path.isfile(history_file_name):
+                            contour_pts = self._file_io.read_contours(history_file_name)
+                        elif os.path.isfile(local_file_name):
+                            contour_pts = self._file_io.read_contours(local_file_name)
+                
                 self._input_data['contours'].append(contour_pts)
 
                 self._file_io.write_contour(history_file_name, self._input_data['contours'][idx],
@@ -468,6 +470,11 @@ class MainWindow(QtWidgets.QMainWindow):
             if img_dir is None:
                 img_dir = ''
             self._status_bar.showMessage(img_dir)
+        if len(err_files) > 0:
+            if len(err_files) > 5:
+                err_files = err_files[:4] + ['... +%d more.' % (len(err_files)-4,)]
+            display_error('Failed to read the following file(s):', '\n'.join(err_files) + \
+                '\n(do you attempt to open spreadsheet(s) generated by other applications?)')
     #
     def _get_data_index(self, csv_file_path, strict=True):
         fn = os.path.basename(csv_file_path)
@@ -479,29 +486,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 if fn.startswith(img_name):
                     return id
         return -1
-
-    def _open_contours(self):
-        if len(self._input_data['images']) == 0 or self._cur_img_id == -1:
-            display_error('No AO images:', 'Please load AO images first!')
-            return
-
-        file_dialog = QtWidgets.QFileDialog(self)
-        file_dialog.setNameFilter("Contour files (*.csv)")
-        file_dialog.setWindowTitle('Open contours')
-        file_dialog.setFileMode(QtWidgets.QFileDialog.ExistingFiles)
-        file_dialog.setWindowFilePath(QtCore.QDir.homePath())
-        file_dialog.setDirectory(self.saveDir)
-        file_dialog.exec()
-
-        csv_filenames = file_dialog.selectedFiles()
-        if len(csv_filenames) is not 0:
-            self.saveDir = file_dialog.directory()
-            self.saveState()
-            if display_warning("Replace contours", "Do you want to load annotations to replace current ones?")\
-                     == QtWidgets.QMessageBox.Ok:
-                self._open_contour_list(csv_filenames)
-                self.contour_pts_checkbox.setChecked(True)
-
     #        
     def _open_contour_list(self, csv_filenames, strict=True):
         err_files = []
@@ -747,7 +731,8 @@ class MainWindow(QtWidgets.QMainWindow):
             dir_name = QtWidgets.QFileDialog.getExistingDirectory(self, \
                     'Select saving directory', sdir)
             if dir_name:
-                self._file_io.write_contours(dir_name, self._input_data, suffix=self.hist.suffix)
+                cnt = self._file_io.write_contours(dir_name, self._input_data, suffix=self.hist.suffix)
+                self._status_bar.showMessage('%d contour file(s) saved to %s' % (cnt, dir_name))
                 self._update_listwidget(self._input_data['image file paths'], newlist=False)
                 self.saveDir = QtCore.QDir(dir_name)
                 self.saveState()

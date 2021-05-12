@@ -21,8 +21,10 @@ def display_error(err, ex):
     msg.setText(err)
     msg.setInformativeText(str(ex))
     #
+    msg.setStandardButtons(QtWidgets.QMessageBox.Ok)
+    #
     geom = QtWidgets.QApplication.primaryScreen().geometry()
-    spacer = QtWidgets.QSpacerItem(geom.width()*20//100, 1,
+    spacer = QtWidgets.QSpacerItem(geom.width()*25//100, 1,
             QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum)
     l = msg.layout()
     l.addItem(spacer, l.rowCount(), 0, 1, l.columnCount())
@@ -65,6 +67,238 @@ class ao_progress_dialog(QtWidgets.QDialog):
     def set_progress(self, val):
         self._progressbar.setValue(val)
         QtWidgets.QApplication.processEvents()
+#
+        
+def _createSmallButton(txt, on_clicked=None):
+    btn = QtWidgets.QPushButton(txt)
+    btn.setStyleSheet('margin: 0; padding: 4 10 4 10;')
+    if not on_clicked is None:
+        btn.clicked.connect(on_clicked)
+    return btn
+#
+
+class ao_open_dialog(QtWidgets.QDialog):
+    def __init__(self, parent, hist):
+        super(ao_open_dialog, self).__init__(parent)
+        self.hist = hist
+        #
+        self._loadDir = QtCore.QDir.home()
+        self._annDir = self._loadDir
+        self.img_list = []
+        self.ann_list = []
+        #
+        self.setWindowFlags(self.windowFlags() & ~QtCore.Qt.WindowContextHelpButtonHint)
+        self.setSizeGripEnabled(True)
+        self.save_geom = None
+        #
+        geom = QtWidgets.QApplication.primaryScreen().geometry()
+        self.gw = geom.width()
+        self.gh = geom.height()
+        self.resize(self.gw * 64 // 100, self.gh * 50 // 100)
+        #
+        self._setup_layout()
+    #
+    def _setup_layout(self):
+        self.setWindowTitle('Open Images and Annotations')
+        view_layout = QtWidgets.QGridLayout()
+        view_layout.setHorizontalSpacing(8)
+        view_layout.setVerticalSpacing(8)
+        self.setLayout(view_layout)
+        #
+        self.img_lab = QtWidgets.QLabel('Image Directory:')
+        view_layout.addWidget(self.img_lab, 0, 0)
+        self.img_dir = QtWidgets.QLineEdit('')
+        self.img_dir.setReadOnly(True)
+        view_layout.addWidget(self.img_dir, 0, 1)
+        self.img_btn = _createSmallButton('...',
+                on_clicked=self._on_img_btn)
+        self.img_btn.setToolTip('Select image directory')
+        view_layout.addWidget(self.img_btn, 0, 2)
+        #
+        self.ann_lab = QtWidgets.QLabel('Annotations Directory:')
+        view_layout.addWidget(self.ann_lab, 1, 0)
+        self.ann_dir = QtWidgets.QLineEdit('')
+        self.ann_dir.setReadOnly(True)
+        view_layout.addWidget(self.ann_dir, 1, 1)
+        self.ann_btn = _createSmallButton('...',
+                on_clicked=self._on_ann_btn)
+        self.ann_btn.setToolTip('Select annotations directory')
+        view_layout.addWidget(self.ann_btn, 1, 2)
+        #
+        self.no_ann_cb = QtWidgets.QCheckBox('Images Only (no Annotations)',
+                stateChanged=self.onNoAnnCb)
+        view_layout.addWidget(self.no_ann_cb, 2, 1)
+        #
+        self.imageTable = QtWidgets.QTableWidget(0, 3)
+        self.imageTable.setColumnWidth(0, 8)
+        self.imageTable.setColumnWidth(1, self.gw * 30 // 100)
+        self.imageTable.setHorizontalHeaderLabels([u'\u221A', u'Image File', u'Annotations File']);
+        self.imageTable.horizontalHeader().setStretchLastSection(True)
+        self.imageTable.verticalHeader().setVisible(False)
+        self.imageTable.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers);
+        self.imageTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows);
+        self.imageTable.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection);
+        self.imageTable.setShowGrid(False);
+        self.imageTable.horizontalHeader().sectionClicked.connect(self.OnHeaderClicked)
+
+        view_layout.addWidget(self.imageTable, 3, 0, 1, 3)
+
+        #
+        self.buttonbox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok |
+                                          QtWidgets.QDialogButtonBox.Cancel)
+        okBtn = self.buttonbox.button(QtWidgets.QDialogButtonBox.Ok)
+        okBtn.setText('  Open Checked  ')
+        self.buttonbox.accepted.connect(self.accept)
+        self.buttonbox.rejected.connect(self.reject)
+        #
+        view_layout.addWidget(self.buttonbox, 4, 0, 1, 3)
+    #
+    def hideEvent(self, e):
+        self.save_geom = self.geometry()
+        QtWidgets.QDialog.hideEvent(self, e)
+    def showEvent(self, e):
+        QtWidgets.QDialog.showEvent(self, e)
+        if not self.save_geom is None:
+            self.setGeometry(self.save_geom)
+    #
+    def onNoAnnCb(self, st):
+        if st:
+            for row in range(self.imageTable.rowCount()):
+                self.imageTable.item(row, 2).setText('')
+            self.ann_dir.setEnabled(False)
+            self.ann_btn.setEnabled(False)
+        else:
+            for row, anm in enumerate(self.ann_list):
+                self.imageTable.item(row, 2).setText(anm)
+            self.ann_dir.setEnabled(True)
+            self.ann_btn.setEnabled(True)
+    #
+    def OnHeaderClicked(self, col):
+        if col != 0: return
+        ck = True
+        for row in range(self.imageTable.rowCount()):
+            if self.imageTable.cellWidget(row, 0).isChecked():
+                ck = False
+                break
+        for row in range(self.imageTable.rowCount()):
+            self.imageTable.cellWidget(row, 0).setChecked(ck)
+    #
+    @property
+    def annDir(self):
+        try:
+            adir = self._annDir.canonicalPath()
+        except Exception:
+            adir = QtCore.QDir.homePath()
+        return adir
+    @annDir.setter
+    def annDir(self, dir_name):
+        try:
+            self._annDir = QtCore.QDir(dir_name)
+        except Exception:
+            self._annDir = QtCore.QDir.home()
+        no_ann = self.isNoAnnotations()
+        adir = self._annDir.canonicalPath()
+        self.ann_dir.setText(adir)
+        for row, fn in enumerate(self.img_list):
+            nm, ext = os.path.splitext(fn)
+            anm = nm + self.hist.suffix
+            apath = os.path.join(adir, anm)
+            if os.path.isfile(apath):
+                self.ann_list[row] = anm
+            else:
+                self.ann_list[row] = anm = ''
+            if no_ann:
+                anm = ''
+            self.imageTable.item(row, 2).setText(anm)
+    #
+    @property
+    def loadDir(self):
+        try:
+            idir = self._loadDir.canonicalPath()
+        except Exception:
+            idir = QtCore.QDir.homePath()
+        return idir
+    @loadDir.setter
+    def loadDir(self, dir_name):
+        try:
+            self._loadDir = QtCore.QDir(dir_name)
+        except Exception:
+            self._loadDir = QtCore.QDir.home()
+        ldir = self._loadDir.canonicalPath()
+        self.img_dir.setText(ldir)
+        self.img_list = []
+        self.ann_list = []
+        try:
+            for fn in os.listdir(ldir):
+                bn, ext = os.path.splitext(fn)
+                if ext.lower() == '.tif':
+                    self.img_list.append(fn)
+                    self.ann_list.append('')
+        except Exception:
+            pass
+        self.img_list.sort()
+        self.imageTable.setRowCount(len(self.img_list))
+        for row, nm in enumerate(self.img_list):
+            cb = QtWidgets.QCheckBox()
+            cb.setChecked(True)
+            cb.setContentsMargins(8, 2, 2, 0)
+            self.imageTable.setCellWidget(row, 0, cb)
+            self.imageTable.setItem(row, 1, QtWidgets.QTableWidgetItem(self.img_list[row]))
+            self.imageTable.setItem(row, 2, QtWidgets.QTableWidgetItem(''))
+    #
+    def _on_img_btn(self, e):
+        dir_name = QtWidgets.QFileDialog.getExistingDirectory(self, \
+                'Select Image Directory', self.loadDir)
+        if not dir_name:
+            return
+        self.loadDir = dir_name
+        self.annDir = dir_name
+    def _on_ann_btn(self, e):
+        dir_name = QtWidgets.QFileDialog.getExistingDirectory(self, \
+                'Select Annotations Directory', self.loadDir)
+        if not dir_name:
+            return
+        self.annDir = dir_name
+    #
+    def setCheckedImages(self, img_list):
+        img_set = set([os.path.basename(fpath) for fpath in img_list])
+        n_checked = 0
+        for row, fn in enumerate(self.img_list):
+            if fn in img_set:
+                self.imageTable.cellWidget(row, 0).setChecked(True)
+                n_checked += 1
+            else:
+                self.imageTable.cellWidget(row, 0).setChecked(False)
+        if n_checked == 0:
+            for row in range(self.imageTable.rowCount()):
+                self.imageTable.cellWidget(row, 0).setChecked(True)
+    #
+    def getImageList(self):
+        ldir = self.loadDir
+        lst = []
+        for row, fn in enumerate(self.img_list):
+            if self.imageTable.cellWidget(row, 0).isChecked():
+                lst.append(os.path.join(ldir, fn))
+        return lst
+    def getAnnotationsList(self):
+        lst = []
+        if self.isNoAnnotations():
+            return lst
+        adir = self.annDir
+        for row, fn in enumerate(self.ann_list):
+            if not self.imageTable.cellWidget(row, 0).isChecked():
+                continue
+            if fn:
+                fn = os.path.join(adir, fn)
+                if not os.path.isfile(fn):
+                    fn = None
+            else:
+                fn = None
+            lst.append(fn)
+        return lst
+    def isNoAnnotations(self):
+        return self.no_ann_cb.isChecked()
+    #
 
 class ao_loc_dialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
@@ -337,3 +571,7 @@ If a cell contour length is less than this value, then the result is discarded.'
                 # self._segmentation_method_box.setCurrentText(jobj['segmentation_method'])
         except Exception:
             pass
+#
+
+
+
