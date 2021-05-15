@@ -36,6 +36,7 @@ about_html = '''
 Tam lab<br>
 National Eye Institute<br>
 National Institutes of Health</div><div><br>
+Cone Segmentation (Machine Learning edition)<br><br>
 If any portion of this software is used, please<br>
 cite the following paper in your publication:
 </div></td></tr><tr><td colspan=2>
