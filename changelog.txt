@@ -7,7 +7,7 @@
 - The "Open Images" dialog no longer opens the images immediately, but allows users to select associated annotations first,
   possibly from a different directory.
 - License (Help/License.txt) replaced according to NEI guidelines.
-- Fixed issue with randomnes in four-color labelling.
+- Fixed issue with randomness in four-color labeling.
 
 #### Version 1.0.2 (2021-02-23) ####
 
