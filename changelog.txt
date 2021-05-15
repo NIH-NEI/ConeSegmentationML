@@ -1,3 +1,14 @@
+#### Version 1.0.4 (2021-05-14) ####
+
+- "Placeholder for IEEE TMI paper" replaced with the actual reference to the published paper
+  in Help->About and Help->Keyboard Shortcuts.
+- Updated descriptions of segmentation parameters (both Help screen and tool tips).
+- All references to "debug" segmentation method removed; sub-directory "model_weights\debug" renamed to "model_weights\A-GANs".
+- The "Open Images" dialog no longer opens the images immediately, but allows users to select associated annotations first,
+  possibly from a different directory.
+- License (Help/License.txt) replaced according to NEI guidelines.
+- Fixed issue with randomnes in four-color labelling.
+
 #### Version 1.0.2 (2021-02-23) ####
 
 - Added "About" box via menu Help->About
@@ -6,7 +17,7 @@
 
 #### Version 1.0.2 (2021-02-12) ####
 
-- Grayed out "Segmentation method" in the SEgmentation Parameter Box.
+- Grayed out "Segmentation method" in the Segmentation Parameter Box.
 - Added tooltips for segmentation parameters.
 - Added Help screen on keyboard shortcuts and mouse operations.
 - F10 (reset brightness/contrast) changed to "Reset View", which resets size/position in addition to brightness/contrast.

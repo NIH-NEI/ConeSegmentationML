@@ -39,7 +39,11 @@ National Institutes of Health</div><div><br>
 If any portion of this software is used, please<br>
 cite the following paper in your publication:
 </div></td></tr><tr><td colspan=2>
-[Placeholder for IEEE TMI paper]
+<b>Jianfei Liu, Christine Shen, Nancy Aguilera, Catherine Cukras, Robert B. Hufnagel,<br>
+Wadih M. Zein, Tao Liu, and Johnny Tam.</b><br>
+"Active Cell Appearance Model Induced Generative Adversarial Networks for Annotation-Efficient<br>
+Cell Segmentation and Identification on Adaptive Optics Retinal Images,"<br>
+<i>IEEE Transactions on Medical Imaging</i>, 2021 (DOI: 10.1109/TMI.2021.3055483)<br>
 </td></tr></table>
 ''' % (_big_icon.url(), cfg.APP_NAME, cfg.APP_VERSION)
 #
@@ -396,6 +400,7 @@ class MainWindow(QtWidgets.QMainWindow):
             dlg.setCheckedImages(self._input_data['image file paths'])
         except Exception:
             pass
+        dlg.selectImageFiles()
         rc = dlg.exec_()
         if not rc: return
         img_list = dlg.getImageList()
@@ -567,8 +572,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.clear_undo()
         self.contour_pts_checkbox.setChecked(True)
 
-        window_title = cfg.APP_NAME + ': ' + self._segmentation_para_dlg.segmentation_method
-        self.setWindowTitle(window_title)
+#         window_title = cfg.APP_NAME + ': ' + self._segmentation_para_dlg.segmentation_method
+#         self.setWindowTitle(window_title)
 
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
         self._progress_dlg.setWindowTitle('Segment cones ...')

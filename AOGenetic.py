@@ -46,8 +46,8 @@ def generateParent(minLength, maxLength, geneSet, get_fitness, createGene):
 
 def getBest(get_fitness, display, minLen, optimalFitness,
             geneSet=None, createGene=None, maxLen=None,
-            customMutate=None, customCrossover=None):
-    random.seed()
+            customMutate=None, customCrossover=None, seed=None):
+    random.seed(seed)
     if geneSet is None and createGene is None:
         raise ValueError('must specify geneSet or createGene')
     if geneSet is not None and createGene is not None:

@@ -38,6 +38,16 @@ thead th {
         <a href="https://nei.nih.gov/">National Eye Institute</a>&nbsp;<br />
         <a href="https://www.nih.gov/">National Institutes of Health</a>&nbsp;<br />
     </div>
+    <div style="color:#000088;">
+        If any portion of this software is used, please cite the following paper in your publication:
+    </div>
+    <div>
+		<b>Jianfei Liu, Christine Shen, Nancy Aguilera, Catherine Cukras, Robert B. Hufnagel,
+		Wadih M. Zein, Tao Liu, and Johnny Tam.</b>
+		"Active Cell Appearance Model Induced Generative Adversarial Networks for Annotation-Efficient
+		Cell Segmentation and Identification on Adaptive Optics Retinal Images,"
+		<i>IEEE Transactions on Medical Imaging</i>, 2021 (DOI: 10.1109/TMI.2021.3055483)
+	</div>
 
     <h4 style="text-align:center;">Segmentation Parameters</h4>
     <table>
@@ -52,7 +62,7 @@ thead th {
                 <td><b>Level-set iterations</b></td>
                 <td>
                     The default value for this parameter is 200, which works for most cases.
-If the image quality is too bad as to cause cell over-segmentation, please reduce this number.
+If the image quality is poor and over-segmentation is observed, please reduce this number.
 Otherwise, increase the value.
                 </td>
             </tr>
@@ -66,7 +76,9 @@ If a cell contour length is less than this value, then the result is discarded.
             <tr>
                 <td><b>Field of view</b></td>
                 <td>
-                    Current AO image's field of view (0.5 .. 3.0).
+                    Field of view that the image was acquired with (typically 0.5 to 3.0 deg.)
+                    For example, a 1.0 means that an image was acquired with a 1.0 deg. field of view
+                    with 750&#x02A2F;605 pixels. This parameter should be scaled if the pixel sampling differs.
                 </td>
             </tr>
         </tbody>

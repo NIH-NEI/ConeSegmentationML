@@ -105,14 +105,14 @@ class ao_open_dialog(QtWidgets.QDialog):
         view_layout.setVerticalSpacing(8)
         self.setLayout(view_layout)
         #
-        self.img_lab = QtWidgets.QLabel('Image Directory:')
+        self.img_lab = QtWidgets.QLabel('Browse Images:')
         view_layout.addWidget(self.img_lab, 0, 0)
         self.img_dir = QtWidgets.QLineEdit('')
         self.img_dir.setReadOnly(True)
         view_layout.addWidget(self.img_dir, 0, 1)
         self.img_btn = _createSmallButton('...',
                 on_clicked=self._on_img_btn)
-        self.img_btn.setToolTip('Select image directory')
+        self.img_btn.setToolTip('Open File Dialog to select source images')
         view_layout.addWidget(self.img_btn, 0, 2)
         #
         self.ann_lab = QtWidgets.QLabel('Annotations Directory:')
@@ -122,7 +122,7 @@ class ao_open_dialog(QtWidgets.QDialog):
         view_layout.addWidget(self.ann_dir, 1, 1)
         self.ann_btn = _createSmallButton('...',
                 on_clicked=self._on_ann_btn)
-        self.ann_btn.setToolTip('Select annotations directory')
+        self.ann_btn.setToolTip('Open File Dialog to select different directory containing annotations')
         view_layout.addWidget(self.ann_btn, 1, 2)
         #
         self.no_ann_cb = QtWidgets.QCheckBox('Images Only (no Annotations)',
@@ -226,16 +226,19 @@ class ao_open_dialog(QtWidgets.QDialog):
             self._loadDir = QtCore.QDir.home()
         ldir = self._loadDir.canonicalPath()
         self.img_dir.setText(ldir)
+        return
+    #
+    def setImageList(self, img_filenames):
+        img_dir = None
         self.img_list = []
         self.ann_list = []
-        try:
-            for fn in os.listdir(ldir):
-                bn, ext = os.path.splitext(fn)
-                if ext.lower() == '.tif':
-                    self.img_list.append(fn)
-                    self.ann_list.append('')
-        except Exception:
-            pass
+        for fpath in img_filenames:
+            if not os.path.isfile(fpath): continue
+            fdir, fn = os.path.split(fpath)
+            if img_dir is None:
+                img_dir = os.path.abspath(fdir)
+            self.img_list.append(fn)
+            self.ann_list.append('')
         self.img_list.sort()
         self.imageTable.setRowCount(len(self.img_list))
         for row, nm in enumerate(self.img_list):
@@ -245,14 +248,28 @@ class ao_open_dialog(QtWidgets.QDialog):
             self.imageTable.setCellWidget(row, 0, cb)
             self.imageTable.setItem(row, 1, QtWidgets.QTableWidgetItem(self.img_list[row]))
             self.imageTable.setItem(row, 2, QtWidgets.QTableWidgetItem(''))
+        if img_dir:
+            self.loadDir = img_dir
+        return self.loadDir
+    #
+    def selectImageFiles(self):
+        file_dialog = QtWidgets.QFileDialog(self)
+        file_dialog.setNameFilters(["TIFF Images (*.tif *.tiff)", "All files (*.*)"])
+        file_dialog.selectNameFilter('')
+        file_dialog.setWindowTitle('Browse Source Images')
+        file_dialog.setFileMode(QtWidgets.QFileDialog.ExistingFiles)
+        file_dialog.setLabelText(QtWidgets.QFileDialog.Accept, 'Select')
+        file_dialog.setWindowFilePath(QtCore.QDir.homePath())
+        file_dialog.setDirectory(self.loadDir)
+        file_dialog.exec()
+
+        img_filenames = file_dialog.selectedFiles()
+        if not img_filenames:
+            return
+        self.annDir = self.setImageList(img_filenames)
     #
     def _on_img_btn(self, e):
-        dir_name = QtWidgets.QFileDialog.getExistingDirectory(self, \
-                'Select Image Directory', self.loadDir)
-        if not dir_name:
-            return
-        self.loadDir = dir_name
-        self.annDir = dir_name
+        self.selectImageFiles()
     def _on_ann_btn(self, e):
         dir_name = QtWidgets.QFileDialog.getExistingDirectory(self, \
                 'Select Annotations Directory', self.loadDir)
@@ -374,17 +391,20 @@ class TipLabel(QtWidgets.QLabel):
 
 class ao_parameter_dialog(QtWidgets.QDialog):
     TIP_ITERATIONS = u'''Level-set iterations: the default number is 200, which works for most cases.
-If the image quality is too bad as to cause cell over-segmentation, please reduce this number.
+If the image quality is poor and over-segmentation is observed, please reduce this number.
 Otherwise, increase the value.'''
     TIP_CONTOUR_LENGTH = u'''Contour length: the shortest length of cell contours.
 If a cell contour length is less than this value, then the result is discarded.'''
-    TIP_FIELD_OF_VIEW = u"""Field of view: Current AO image's field of view (0.5 .. 3.0)."""
+    TIP_FIELD_OF_VIEW = u"""Field of view: Field of view that the image was acquired with (typically 0.5 to 3.0 deg.)
+For example, a 1.0 means that an image was acquired with a 1.0 deg. field of view with 750x605 pixels.
+This parameter should be scaled if the pixel sampling differs."""
     def __init__(self, parent=None):
         super(ao_parameter_dialog, self).__init__(parent)
         self.setWindowFlags(self.windowFlags() & ~QtCore.Qt.WindowContextHelpButtonHint)
         self.setSizeGripEnabled(True)
         self.save_geom = None
         #
+        self._segmentation_weights = {}
         self._segmentation_method = '-- No method --'
         #
         self.normal = QtGui.QFont(self.font())
@@ -406,6 +426,8 @@ If a cell contour length is less than this value, then the result is discarded.'
         return self._segmentation_method
     @segmentation_method.setter
     def segmentation_method(self, v):
+        if not v in self._segmentation_weights:
+            return
         self._segmentation_method = v
         if hasattr(self, '_segmentation_method_box'):
             self._segmentation_method_box.setText(v)
@@ -415,13 +437,13 @@ If a cell contour length is less than this value, then the result is discarded.'
         
         qmark = QtGui.QPixmap(os.path.join(icon_dir, 'help_small.png'));
         
-        segmentation_method_label = QtWidgets.QLabel('Segmentation method:')
-        #self._segmentation_method_box = QtWidgets.QComboBox()
-        #self._detection_method_box.currentIndexChanged.connect(self._select_detection_method)
-        self._segmentation_method_box = QtWidgets.QLineEdit(self._segmentation_method)
-        self._segmentation_method_box.setReadOnly(True)
-        self._segmentation_method_box.setStyleSheet(
-            "QLineEdit {background: rgb(220, 220, 220); selection-background-color: rgb(128, 160, 255);}")
+#         segmentation_method_label = QtWidgets.QLabel('Segmentation method:')
+#         #self._segmentation_method_box = QtWidgets.QComboBox()
+#         #self._detection_method_box.currentIndexChanged.connect(self._select_detection_method)
+#         self._segmentation_method_box = QtWidgets.QLineEdit(self._segmentation_method)
+#         self._segmentation_method_box.setReadOnly(True)
+#         self._segmentation_method_box.setStyleSheet(
+#             "QLineEdit {background: rgb(220, 220, 220); selection-background-color: rgb(128, 160, 255);}")
 
         iteration_label = QtWidgets.QLabel('Level-set iterations:')
         iteration_label.setToolTip(self.TIP_ITERATIONS)
@@ -478,8 +500,8 @@ If a cell contour length is less than this value, then the result is discarded.'
         view_layout.setColumnStretch(3, 10)
         view_layout.addWidget(self.imageTable, 0, 0, 1, 4)
         
-        view_layout.addWidget(segmentation_method_label, 1, 0)
-        view_layout.addWidget(self._segmentation_method_box, 1, 1, 1, 3)
+#         view_layout.addWidget(segmentation_method_label, 1, 0)
+#         view_layout.addWidget(self._segmentation_method_box, 1, 1, 1, 3)
         
         view_layout.addWidget(iteration_label, 2, 0)
         view_layout.addWidget(self._iteration_input, 2, 1)
@@ -487,7 +509,7 @@ If a cell contour length is less than this value, then the result is discarded.'
         
         tip_label = QtWidgets.QLabel('Press on (?) and hold the mouse\nto read a brief description.')
         tip_label.setAlignment(QtCore.Qt.AlignTop)
-        tip_label.setStyleSheet('QLabel {color: gray;}')
+        tip_label.setStyleSheet('QLabel {color: gray; margin: 2, 12, 2, 12;}')
         view_layout.addWidget(tip_label, 2, 3, 3, 1)
         
         view_layout.addWidget(cell_contour_length_label, 3, 0)
@@ -534,11 +556,12 @@ If a cell contour length is less than this value, then the result is discarded.'
             QtWidgets.QDialog.accept(self)
     #
     def set_segmentation_weights(self, weights):
-
-        for method in sorted(weights.keys()):
-            self.segmentation_method = method
-            break
-            # self._segmentation_method_box.addItem(method)
+        self._segmentation_weights = weights or {}
+        if not self.segmentation_method in self._segmentation_weights:
+            for method in sorted(weights.keys()):
+                self.segmentation_method = method
+                break
+                # self._segmentation_method_box.addItem(method)
 
     def get_iteration_number(self):
         return self._iteration_input.value()

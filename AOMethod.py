@@ -47,9 +47,9 @@ scanning_img_cols = 333
 #         axarr[0][i].imshow(images[i], cmap='gray')
 #     plt.show()
 
-def display_images(image):
-    plt.imshow(image, cmap='gray')
-    plt.show()
+# def display_images(image):
+#     plt.imshow(image, cmap='gray')
+#     plt.show()
 
 
 class ao_method():
@@ -382,29 +382,6 @@ class ao_method():
         #
         return res
 
-    @timing
-    def _build_connection_graph_old(self, cell_info):
-        # the connection groph is slight inaccurater than c++ version
-        threshod = 5
-        # return a connectiong graph rerpesented as an dictionary
-        connection_dict = {}
-        # convert dictionary key and items to string to fit for four-color coding
-        for i in range(len(cell_info['centroid'])):
-            connection_dict[str(i)] = []
-
-        for i in range(len(cell_info['centroid'])-1):
-            cur_centroid = cell_info['centroid'][i]
-            cur_radius = cell_info['radius'][i]
-            for j in range(i+1, len(cell_info['centroid'])):
-                comp_centroid = cell_info['centroid'][j]
-                comp_radius = cell_info['radius'][j]
-
-                dist = math.sqrt((cur_centroid[0]-comp_centroid[0])**2 + (cur_centroid[1]-comp_centroid[1])**2)
-                if dist < cur_radius + comp_radius + threshod:
-                    connection_dict[str(i)].append(str(j))
-                    connection_dict[str(j)].append(str(i))
-        return connection_dict
-
     def _color_map(self, connection_dict):
         rules = buildRules(connection_dict, len(connection_dict)+100)
         colors = ["1", "2", "3", "4", "5"]
@@ -418,7 +395,8 @@ class ao_method():
         fnDisplay = lambda candidate: display(candidate, startTime)
         fnGetFitness = lambda candidate: getFitness(candidate, rules)
 
-        best = AOGenetic.getBest(fnGetFitness, fnDisplay, len(connection_dict), optimalValue, geneset)
+        best = AOGenetic.getBest(fnGetFitness, fnDisplay, len(connection_dict), optimalValue, geneset,
+                seed=1234567890)
         # self.assertEqual(best.Fitness, optimalValue)
 
         keys = sorted(connection_dict.keys())
