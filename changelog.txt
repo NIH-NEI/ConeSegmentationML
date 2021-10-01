@@ -1,3 +1,8 @@
+#### Version 1.0.5 (2021-09-30) ####
+
+- Added menu "Snapshot...". It opens a preview window displaying current image w. annotations, an option to change scale
+and a "Save" button which opens a file dialog to select a .png file to save the snapshot to.
+
 #### Version 1.0.4 (2021-05-14) ####
 
 - "Placeholder for IEEE TMI paper" replaced with the actual reference to the published paper
@@ -7,9 +12,9 @@
 - The "Open Images" dialog no longer opens the images immediately, but allows users to select associated annotations first,
   possibly from a different directory.
 - License (Help/License.txt) replaced according to NEI guidelines.
-- Fixed issue with randomness in four-color labeling.
+- Fixed issue with randomnes in four-color labelling.
 
-#### Version 1.0.2 (2021-02-23) ####
+#### Version 1.0.3 (2021-02-23) ####
 
 - Added "About" box via menu Help->About
 - Made the (?) labels next to parameters in the segmentation dialog clickable

@@ -20,6 +20,7 @@ import AOSettingsDialog
 from AOSettingsDialog import ao_open_dialog, ao_parameter_dialog
 from AOSettingsDialog import ao_progress_dialog, ao_loc_dialog
 from AOSettingsDialog import display_error, display_warning
+from AOSnap import ao_snap_dialog
 import AOConfig as cfg
 
 BASE_DIR = os.path.dirname(__file__)
@@ -205,9 +206,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
         flist_layout = Qt.QVBoxLayout()
         flist_layout.addWidget(self._file_list, 4)
+        
+        self.vtkWinWidget = QtWidgets.QWidget(self)
+        vtk_layout = Qt.QVBoxLayout()
+        self.vtkWinWidget.setLayout(vtk_layout)
+        vtk_layout.addWidget(vtkWidget)
 
         view_layout = Qt.QGridLayout()
-        view_layout.addWidget(vtkWidget, 0, 0)
+        view_layout.addWidget(self.vtkWinWidget, 0, 0)
+        #view_layout.addWidget(vtkWidget, 0, 0)
         view_layout.addLayout(flist_layout, 0, 1, QtCore.Qt.AlignRight)
         view_layout.setColumnStretch(0, 5)
         view_layout.setColumnStretch(1, 1)
@@ -260,6 +267,12 @@ class MainWindow(QtWidgets.QMainWindow):
         view_menu.addSeparator()
         view_menu.addAction(self.reset_brightness_contrast)
         view_menu.addAction(self.data_loc_act)
+        view_menu.addSeparator()
+        self.snap_annotated_act = QtWidgets.QAction('Snapshot...', self, shortcut='F7',
+                    icon=qt_icon('camera'),
+                    statusTip='Take a snapshot of the current image with annotations',
+                    triggered=self._snap_annotated)
+        view_menu.addAction(self.snap_annotated_act)
 
         self.about_act = QtWidgets.QAction('About', self,
                     icon=qt_icon('about'),
@@ -267,6 +280,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.help_act = QtWidgets.QAction('Keyboard Shortcuts...', self, shortcut='F1',
                     icon=qt_icon('help'),
                     toolTip='Display list of keyboard shortcuts',
+                    statusTip='Display list of keyboard shortcuts',
                     triggered=self._display_help)
         
         help_menu = self.menuBar().addMenu("&Help")
@@ -392,6 +406,25 @@ class MainWindow(QtWidgets.QMainWindow):
         helpWindow.move(geom.width() * 20 // 100, geom.height() * 14 // 100)
         
         helpWindow.showNormal()
+    #
+    def _snap_annotated(self):
+        if len(self._input_data['images']) == 0: return
+        if self._cur_img_id == -1:
+            return
+        dlg = ao_snap_dialog(parent=self)
+        dlg.setWindowTitle(self._input_data['image names'][self._cur_img_id]+' - Snapshot')
+        dlg.setWindowIcon(qt_icon('ConeSegmentationML.png'))
+        dlg.setImageData(
+            self._input_data['image file paths'][self._cur_img_id],
+            img_data=self._input_data['images'][self._cur_img_id],
+            interpolation=self._image_view.interpolation,
+        )
+        dlg.setContours(
+            self._input_data['contours'][self._cur_img_id],
+            contour_width=self._image_view._contour_width,
+            contour_color=(0, 0xFF, 0),
+        )
+        dlg.exec_()
     #
     def _open_images(self):
         dlg = ao_open_dialog(self, self.hist)
