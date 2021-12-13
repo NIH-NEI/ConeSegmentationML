@@ -41,7 +41,9 @@ When selected, multiple segmentation results are produced, one per each value in
 
 4. Create Conda Virtual Environment (do this once, next time skip to the next step):
 
-	`conda env create --file conda-environment.yml`
+	`conda env create --file conda-environment-win.yml` (Windows)
+
+	`conda env create --file conda-environment-mac.yml` (MAC OS)
    
 5. Activate the Virtual Environment:
 

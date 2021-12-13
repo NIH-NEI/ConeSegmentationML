@@ -1,0 +1,19 @@
+name: ConeSegmentation
+dependencies:
+  - python=3.6
+  - pip
+  - pip:
+    - tensorflow==1.10
+    - keras==2.1.3
+    - vtk==8.1
+    - SimpleITK==1.2.4
+    - itk-filtering==5.1.2
+    - numpy
+    - scipy
+    - imageio
+    - scikit-image
+    - matplotlib
+    - pyinstaller
+    - PyQt5
+    - PyQtWebEngine
+    - setuptools
