@@ -12,7 +12,7 @@ InstallDir $PROGRAMFILES64\ConeSegmentationML
  
 ;define installer name
 Name "Cone Segmentation (ML) 1.0.5x"
-OutFile "dist\ConeSegmentationML-win64-1.0.5x.exe"
+OutFile "dist\ConeSegmentationML-1.0.5x-win64.exe"
 
 ;SetCompressor lzma
 
