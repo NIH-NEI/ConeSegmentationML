@@ -19,6 +19,16 @@
 <img src="assets/main_ui.png" width="563" height="360" />
 <img src="assets/editing.png" width="491" height="360" />
 
+### This is an experimental version containing feature(s) not found in the general-purpose version.
+
+The Segmentation dialog has an option to specify a range of values for the parameter "Level-set iterations", rather than a single value:
+
+<img src="assets/levelset_range_dialog.png" />
+
+When selected, multiple segmentation results are produced, one per each value in the range. The range settings work as for-loop parameters {`for (n=Start; n<=End; n+=Step)`}, e.g. if Start=150, End=250 and Step=50, then results are computed for "Level-set iterations" = 150, 200 and 250. In this case a slider is enabled on the main screen, which allows the user to browse across different results:
+
+<img src="assets/levelset_range_main.png" />
+
 ---------------
 
 ## Setting up development environment

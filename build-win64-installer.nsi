@@ -1,5 +1,5 @@
 
-!define VERSION "1.0.5"
+!define VERSION "1.0.5x"
 !define PATCH  "1"
 !define INST_DIR "dist\ConeSegmentationML"
 
@@ -11,7 +11,7 @@ Var START_MENU
 InstallDir $PROGRAMFILES64\ConeSegmentationML
  
 ;define installer name
-Name "Cone Segmentation (ML) 1.0.5"
+Name "Cone Segmentation (ML) 1.0.5x"
 OutFile "dist\ConeSegmentationML-win64.exe"
 
 ;SetCompressor lzma
@@ -63,10 +63,10 @@ WriteRegStr SHCTX "Software\National Eye Institute\Cone Segmentation (ML)" "" $I
 WriteUninstaller $INSTDIR\uninstall.exe
 
 Push "DisplayName"
-Push "Cone Segmentation (ML)"
+Push "Cone Segmentation (ML) X"
 Call ConditionalAddToRegisty
 Push "DisplayVersion"
-Push "1.0.5"
+Push "1.0.5x"
 Call ConditionalAddToRegisty
 Push "Publisher"
 Push "National Eye Institute"
@@ -83,9 +83,9 @@ Call ConditionalAddToRegisty
   
 ;Create shortcuts
 CreateDirectory "$SMPROGRAMS\Cone Segmentation (ML)"
-CreateShortCut "$SMPROGRAMS\Cone Segmentation (ML)\Cone Segmentation (ML).lnk" "$INSTDIR\__main__.exe"
-CreateShortCut "$SMPROGRAMS\Cone Segmentation (ML)\Uninstall Cone Segmentation (ML).lnk" "$INSTDIR\uninstall.exe"
-CreateShortCut "$DESKTOP\Cone Segmentation (ML).lnk" "$INSTDIR\__main__.exe"
+CreateShortCut "$SMPROGRAMS\Cone Segmentation (ML)\Cone Segmentation (ML) v1.0.5x.lnk" "$INSTDIR\__main__.exe"
+CreateShortCut "$SMPROGRAMS\Cone Segmentation (ML)\Uninstall Cone Segmentation (ML) v1.0.5x.lnk" "$INSTDIR\uninstall.exe"
+CreateShortCut "$DESKTOP\Cone Segmentation (ML) v1.0.5x.lnk" "$INSTDIR\__main__.exe"
 
 ; Write special uninstall registry entries
 Push "StartMenu"
@@ -104,7 +104,7 @@ Section "Uninstall"
 SetShellVarContext all
  
 ReadRegStr $START_MENU SHCTX \
-   "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML)" "StartMenu"
+   "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML) v1.0.5x" "StartMenu"
 
  
 # Always delete uninstaller first
@@ -114,23 +114,23 @@ Delete $INSTDIR\uninstall.exe
 RMDir /r /REBOOTOK $INSTDIR
 
 ; Remove the registry entries.
-DeleteRegKey SHCTX "Software\National Eye Institute\Cone Segmentation (ML)"
-DeleteRegKey SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML)"
+DeleteRegKey SHCTX "Software\National Eye Institute\Cone Segmentation (ML) v1.0.5x"
+DeleteRegKey SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML) v1.0.5x"
 
-Delete "$SMPROGRAMS\Cone Segmentation (ML)\Uninstall Cone Segmentation (ML).lnk"
-Delete "$SMPROGRAMS\Cone Segmentation (ML)\Cone Segmentation (ML).lnk"
-Delete "$DESKTOP\Cone Segmentation (ML).lnk"
+Delete "$SMPROGRAMS\Cone Segmentation (ML)\Uninstall Cone Segmentation (ML) v1.0.5x.lnk"
+Delete "$SMPROGRAMS\Cone Segmentation (ML)\Cone Segmentation (ML) v1.0.5x.lnk"
+Delete "$DESKTOP\Cone Segmentation (ML) v1.0.5x.lnk"
 
 DeleteRegKey /ifempty SHCTX "Software\National Eye Institute\Cone Segmentation (ML)"
 
 SectionEnd
 
 Function .onInit
-  ReadRegStr $0 SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML)" "UninstallString"
+  ReadRegStr $0 SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML) v1.0.5x" "UninstallString"
   StrCmp $0 "" inst
 
   MessageBox MB_YESNOCANCEL|MB_ICONEXCLAMATION \
-  "Cone Segmentation (ML) is already installed. $\n$\nDo you want to uninstall the old version before installing the new one?" \
+  "Cone Segmentation (ML) v1.0.5x is already installed. $\n$\nDo you want to uninstall the old version before installing the new one?" \
   /SD IDYES IDYES uninst IDNO inst
   Abort
 

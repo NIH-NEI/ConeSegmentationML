@@ -391,8 +391,8 @@ class TipLabel(QtWidgets.QLabel):
 
 class ao_parameter_dialog(QtWidgets.QDialog):
     TIP_ITERATIONS = u'''Level-set iterations: the default number is 200, which works for most cases.
-If the image quality is poor and over-segmentation is observed, please reduce this number.
-Otherwise, increase the value.'''
+If the image quality is poor and over-segmentation is observed, reduce this number.
+Otherwise, increase the value. Use "Value range" to try out different settings at once.'''
     TIP_CONTOUR_LENGTH = u'''Contour length: the shortest length of cell contours.
 If a cell contour length is less than this value, then the result is discarded.'''
     TIP_FIELD_OF_VIEW = u"""Field of view: Field of view that the image was acquired with (typically 0.5 to 3.0 deg.)
@@ -432,6 +432,14 @@ This parameter should be scaled if the pixel sampling differs."""
         if hasattr(self, '_segmentation_method_box'):
             self._segmentation_method_box.setText(v)
     #
+    @staticmethod
+    def _create_spin_box(v, r=(1, 10000), s=1):
+        res = QtWidgets.QSpinBox()
+        res.setRange(*r)
+        res.setSingleStep(s)
+        res.setValue(v)
+        return res
+    #
     def _setup_layout(self):
         self.setWindowTitle('Cone segmentation')
         
@@ -445,15 +453,36 @@ This parameter should be scaled if the pixel sampling differs."""
 #         self._segmentation_method_box.setStyleSheet(
 #             "QLineEdit {background: rgb(220, 220, 220); selection-background-color: rgb(128, 160, 255);}")
 
-        iteration_label = QtWidgets.QLabel('Level-set iterations:')
-        iteration_label.setToolTip(self.TIP_ITERATIONS)
-        self._iteration_input = QtWidgets.QSpinBox()
-        self._iteration_input.setRange(1, 10000)
-        self._iteration_input.setSingleStep(1)
-        self._iteration_input.setValue(200)
-        #self._iteration_input.setToolTip(self.TIP_ITERATIONS)
+        iter_panel = QtWidgets.QGroupBox('Level-set iterations')
+        iter_layout = QtWidgets.QGridLayout()
+        iter_panel.setLayout(iter_layout)
+        self.rb_single = QtWidgets.QRadioButton('Single value')
+        self.rb_single.setStyleSheet('QRadioButton {margin-right: 48;}')
+        iter_layout.addWidget(self.rb_single, 0, 0)
+        self.rb_range = QtWidgets.QRadioButton('Value range')
+        iter_layout.addWidget(self.rb_range, 1, 0)
+        self.rb_single.setChecked(True)
+        
+        self._iteration_input = self._create_spin_box(200, r=(1, 10000), s=1)
+        iter_layout.addWidget(self._iteration_input, 0, 1)
+        
+        start_lb = QtWidgets.QLabel(' Start:')
+        start_lb.setAlignment(QtCore.Qt.AlignRight)
+        self._start_input = self._create_spin_box(50, r=(1, 10000), s=1)
+        end_lb = QtWidgets.QLabel(' End:')
+        self._end_input = self._create_spin_box(300, r=(1, 10000), s=1)
+        step_lb = QtWidgets.QLabel(' Step:')
+        self._step_input = self._create_spin_box(50, r=(5, 100), s=5)
+        
+        iter_layout.addWidget(start_lb, 1, 1)
+        iter_layout.addWidget(self._start_input, 1, 2)
+        iter_layout.addWidget(end_lb, 1, 3)
+        iter_layout.addWidget(self._end_input, 1, 4)
+        iter_layout.addWidget(step_lb, 1, 5)
+        iter_layout.addWidget(self._step_input, 1, 6)
 
         iteration_q = TipLabel(qmark, self.TIP_ITERATIONS)
+        iter_layout.addWidget(iteration_q, 0, 2)
 
         cell_contour_length_label = QtWidgets.QLabel('Cell contour length:')
         cell_contour_length_label.setToolTip(self.TIP_CONTOUR_LENGTH)
@@ -461,7 +490,6 @@ This parameter should be scaled if the pixel sampling differs."""
         self._cell_contour_length_input.setRange(1, 1000)
         self._cell_contour_length_input.setSingleStep(1)
         self._cell_contour_length_input.setValue(20)
-        #self._cell_contour_length_input.setToolTip(self.TIP_CONTOUR_LENGTH)
         
         cell_contour_length_q = TipLabel(qmark, self.TIP_CONTOUR_LENGTH)
 
@@ -469,7 +497,6 @@ This parameter should be scaled if the pixel sampling differs."""
         fov_label.setToolTip(self.TIP_FIELD_OF_VIEW)
         self._fov_input = QtWidgets.QLineEdit('0.75')
         self._fov_input.setValidator(QtGui.QDoubleValidator(0.0, 10.0, 3))
-        #self._fov_input.setToolTip(self.TIP_FIELD_OF_VIEW)
         
         fov_q = TipLabel(qmark, self.TIP_FIELD_OF_VIEW)
 
@@ -503,14 +530,12 @@ This parameter should be scaled if the pixel sampling differs."""
 #         view_layout.addWidget(segmentation_method_label, 1, 0)
 #         view_layout.addWidget(self._segmentation_method_box, 1, 1, 1, 3)
         
-        view_layout.addWidget(iteration_label, 2, 0)
-        view_layout.addWidget(self._iteration_input, 2, 1)
-        view_layout.addWidget(iteration_q, 2, 2)
+        view_layout.addWidget(iter_panel, 2, 0, 1, 4)
         
-        tip_label = QtWidgets.QLabel('Press on (?) and hold the mouse\nto read a brief description.')
+        tip_label = QtWidgets.QLabel('Press (?) and hold mouse to read a brief description.')
         tip_label.setAlignment(QtCore.Qt.AlignTop)
-        tip_label.setStyleSheet('QLabel {color: gray; margin: 2, 12, 2, 12;}')
-        view_layout.addWidget(tip_label, 2, 3, 3, 1)
+        tip_label.setStyleSheet('QLabel {color: gray; margin: 2, 12, 2, 32;}')
+        view_layout.addWidget(tip_label, 4, 3, 2, 1)
         
         view_layout.addWidget(cell_contour_length_label, 3, 0)
         view_layout.addWidget(self._cell_contour_length_input, 3, 1)
@@ -522,6 +547,17 @@ This parameter should be scaled if the pixel sampling differs."""
         
         view_layout.addWidget(self.buttonbox, 6, 0, 1, 4)
         self.setLayout(view_layout)
+        #
+        self.rb_single.toggled.connect(self._handle_iter_rb)
+        self.rb_range.toggled.connect(self._handle_iter_rb)
+        self._handle_iter_rb(True)
+    #
+    def _handle_iter_rb(self, st):
+        st = self.rb_single.isChecked()
+        self._iteration_input.setEnabled(st)
+        self._start_input.setEnabled(not st)
+        self._end_input.setEnabled(not st)
+        self._step_input.setEnabled(not st)
     #
     def SetImageList(self, items):
         self.imageTable.setRowCount(len(items))
@@ -551,8 +587,19 @@ This parameter should be scaled if the pixel sampling differs."""
         for row in range(self.imageTable.rowCount()):
             self.imageTable.cellWidget(row, 0).setChecked(ck)
     #
+    def _validate_range(self):
+        if self.iteration_single:
+            return True
+        try:
+            return len(range(*self.iteration_range)) > 0
+        except Exception:
+            return False
     def accept(self):
-        if len(self.checkedRows()) > 0:
+        if len(self.checkedRows()) <= 0:
+            display_error('Invalid input:', 'Please select at least one image to segment')
+        elif not self._validate_range():
+            display_error('Invalid input:', 'Please select a valid range for levelset iterations')
+        else:
             QtWidgets.QDialog.accept(self)
     #
     def set_segmentation_weights(self, weights):
@@ -572,12 +619,44 @@ This parameter should be scaled if the pixel sampling differs."""
     def get_image_fov(self):
         return float(self._fov_input.text())
     #
+    @property
+    def iteration_range(self):
+        return (self._start_input.value(), self._end_input.value(), self._step_input.value(),)
+    @iteration_range.setter
+    def iteration_range(self, v):
+        try:
+            self._start_input.setValue(int(v[0]))
+            self._end_input.setValue(int(v[1]))
+            self._step_input.setValue(int(v[2]))
+        except Exception:
+            self._start_input.setValue(100)
+            self._end_input.setValue(300)
+            self._step_input.setValue(20)
+    #
+    @property
+    def iteration_single(self):
+        return self.rb_single.isChecked()
+    @iteration_single.setter
+    def iteration_single(self, st):
+        if st:
+            self.rb_single.setChecked(True)
+        else:
+            self.rb_range.setChecked(True)
+    #
+    @property
+    def levelset_iterations(self):
+        if self.iteration_single:
+            return self.get_iteration_number()
+        return self.iteration_range
+    #
     def get_state(self):
         jobj = {
             'segmentation_method': self.segmentation_method,
             'levelset_iterations': self.get_iteration_number(),
             'contour_length': self.get_cell_contour_length(),
             'image_fov': self.get_image_fov(),
+            'iteration_range': self.iteration_range,
+            'iteration_single': self.iteration_single,
         }
         return jobj
     #
@@ -591,7 +670,10 @@ This parameter should be scaled if the pixel sampling differs."""
                 self._fov_input.setText(str(jobj['image_fov']))
             if 'segmentation_method' in jobj:
                 self.segmentation_method = jobj['segmentation_method']
-                # self._segmentation_method_box.setCurrentText(jobj['segmentation_method'])
+            if 'iteration_range' in jobj:
+                self.iteration_range = jobj['iteration_range']
+            if 'iteration_single' in jobj:
+                self.iteration_single = jobj['iteration_single']
         except Exception:
             pass
 #

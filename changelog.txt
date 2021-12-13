@@ -1,3 +1,9 @@
+#### Version 1.0.5x (2021-12-10) ####
+
+- (Experimental) Added an option for selecting a range of values for "Level-set iterations" segmentation parameter.
+  When selected, multiple results are produced for the specified range, and a slider on the main screen is enabled
+  to allow users to browse across different results.
+
 #### Version 1.0.5 (2021-09-30) ####
 
 - Added menu "Snapshot...". It opens a preview window displaying current image w. annotations, an option to change scale
