@@ -1,3 +1,5 @@
+rm -rf build/
+rm -rf dist/
 pyinstaller --clean --noconfirm build-app-dir.spec
 rm -rf dist/ConeSegmentationML/
 hdiutil create "ConeSegmentationML-Darwin0.dmg" -format UDRW -ov -volname "ConeSegmentationML" -fs HFS+ -srcfolder "dist/" -attach
