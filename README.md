@@ -31,7 +31,9 @@
 
 4. Create Conda Virtual Environment (do this once, next time skip to the next step):
 
-	`conda env create --file conda-environment.yml`
+	`conda env create --file conda-environment-win.yml` (Windows)
+
+	`conda env create --file conda-environment-mac.yml` (MAC OS)
    
 5. Activate the Virtual Environment:
 
@@ -66,7 +68,7 @@ The result is `<prefix>/ConeSegmentationML/dist/ConeSegmentationML.app`.
 `"C:\Program Files (x86)\NSIS\makensis.exe" /V4 build-win64-installer.nsi`
 
 (Replace `C:\Program Files (x86)\NSIS` with the actual installation directory, if different from default).
-If successful, the result is `<prefix>/ConeSegmentationML/dist/ConeSegmentationML-win64.exe`. This is a regular Windows installer, which can be distributed to other Windows systems. It requires admin access.
+If successful, the result is `<prefix>/ConeSegmentationML/dist/ConeSegmentationML-{version}-win64.exe`. This is a regular Windows installer, which can be distributed to other Windows systems. It requires admin access.
 
 <img src="assets/wininstall.png" width="463" height="360" />
 
@@ -80,7 +82,7 @@ If successful, the result is `<prefix>/ConeSegmentationML/dist/ConeSegmentationM
 
 	`bash make_dmg.sh`
 
-If prompted to allow Terminal to run Finder scripts, answer "Allow". The result is `<prefix>/ConeSegmentationML/dist/ConeSegmentationML-Darwin.dmg`. It is a Mac OS disk image file; when opened, it asks for accepting the license agreement, then mounts itself as an external drive and opens a Finder window, that looks like this:
+If prompted to allow Terminal to run Finder scripts, answer "Allow". The result is `<prefix>/ConeSegmentationML/dist/ConeSegmentationML-{version}-Darwin.dmg`. It is a Mac OS disk image file; when opened, it asks for accepting the license agreement, then mounts itself as an external drive and opens a Finder window, that looks like this:
 
 <img src="assets/macinstall.png" width="605" height="360" />
 
