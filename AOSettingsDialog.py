@@ -49,6 +49,26 @@ def display_warning(msg, msg2):
     #
     return b.exec_()
 
+def askYesNo(title, text, detail=None):
+    b = QtWidgets.QMessageBox()
+    b.setIcon(QtWidgets.QMessageBox.Question)
+    b.setWindowTitle(title)
+    b.setText(text)
+    if detail:
+         b.setInformativeText(detail)
+    #
+    b.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+    b.setDefaultButton(QtWidgets.QMessageBox.Yes)
+    #
+    geom = QtWidgets.QApplication.primaryScreen().geometry()
+    spacer = QtWidgets.QSpacerItem(geom.width()*20//100, 1,
+            QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum)
+    l = b.layout()
+    l.addItem(spacer, l.rowCount(), 0, 1, l.columnCount())
+    #
+    return b.exec_() == QtWidgets.QMessageBox.Yes
+#
+
 class ao_progress_dialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super(ao_progress_dialog, self).__init__(parent)
@@ -351,6 +371,7 @@ class ao_loc_dialog(QtWidgets.QDialog):
         
         self.buttonbox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok)
         self.buttonbox.accepted.connect(self.accept)
+        
         view_layout.addWidget(self.buttonbox, 6, 0)
     #
     def hideEvent(self, e):
@@ -520,8 +541,17 @@ This parameter should be scaled if the pixel sampling differs."""
         view_layout.addWidget(self._fov_input, 4, 1)
         view_layout.addWidget(fov_q, 4, 2)
         
+        self.defBtn = QtWidgets.QPushButton('Restore Defaults')
+        view_layout.addWidget(self.defBtn, 5, 0)
+        self.defBtn.clicked.connect(self.restoreDefaults)
+        
         view_layout.addWidget(self.buttonbox, 6, 0, 1, 4)
         self.setLayout(view_layout)
+    #
+    def restoreDefaults(self):
+        self._iteration_input.setValue(200)
+        self._cell_contour_length_input.setValue(20)
+        self._fov_input.setText('0.75')
     #
     def SetImageList(self, items):
         self.imageTable.setRowCount(len(items))

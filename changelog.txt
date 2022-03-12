@@ -1,3 +1,12 @@
+#### Version 1.0.6 (2022-03-12) ####
+
+- Added "Voronoi" button in the toolbar to toggle Voronoi Diagram display.
+- Added "Restore Defaults" button to the "Cone segmentation" dialog.
+- Added "File"->"Delete Annotations" menu to erase all annotations on the current image.
+- Drag and drop sets the default output directory to where images were dragged from.
+- Brightness/Contrast is adjusted separately on each image and not carried over to other images.
+- Brightness/Contrast changes can be undone with the “Redo” button.
+
 #### Version 1.0.5 (2021-09-30) ####
 
 - Added menu "Snapshot...". It opens a preview window displaying current image w. annotations, an option to change scale

@@ -19,7 +19,7 @@ import AOMethod
 import AOSettingsDialog
 from AOSettingsDialog import ao_open_dialog, ao_parameter_dialog
 from AOSettingsDialog import ao_progress_dialog, ao_loc_dialog
-from AOSettingsDialog import display_error, display_warning
+from AOSettingsDialog import display_error, display_warning, askYesNo
 from AOSnap import ao_snap_dialog
 import AOConfig as cfg
 
@@ -80,6 +80,7 @@ class MainWindow(QtWidgets.QMainWindow):
             'image names': [],
             'images': [],
             'contours': [],
+            'colors': [],
         }
         self._cur_img_id = -1
         self.loadDir = QtCore.QDir.home()
@@ -99,6 +100,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowTitle(cfg.APP_NAME+' ver. '+cfg.APP_VERSION)
         geom = QtWidgets.QApplication.primaryScreen().geometry()
         self.setMinimumSize(geom.width()*60/100, geom.height()*65/100)
+        
+        self.resize(geom.width()*70/100, geom.height()*70/100)
+        self.move(geom.width()*12/100, geom.height()*10/100)
 
         self._setup_layout()
         self._setup_menu()
@@ -131,6 +135,9 @@ class MainWindow(QtWidgets.QMainWindow):
             if 'interpolation' in jobj:
                 self._image_view.interpolation = jobj['interpolation']
                 self.toggle_interpolation.setChecked(self._image_view.interpolation)
+            if jobj.get('voronoi', False):
+                self._image_view.voronoi = True
+                self.voronoi_act.setChecked(True)
             if 'contour_width' in jobj:
                 self._contour_width_input.setValue(int(jobj['contour_width']))
             self._segmentation_para_dlg.set_state(jobj['segmentation_para'])
@@ -154,6 +161,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 'segmentation_para': self._segmentation_para_dlg.get_state(),
                 'contour_width': self._contour_width_input.value(),
                 'interpolation': self._image_view.interpolation,
+                'voronoi': True if self._image_view.voronoi else False,
             }
             if not ldir is None:
                 jobj['loadDir'] = ldir
@@ -172,7 +180,7 @@ class MainWindow(QtWidgets.QMainWindow):
         csv_filenames = flist.get_files('.csv')
         strict = False
         if len(img_filenames) > 0:
-            self._open_image_list(img_filenames)
+            self._open_image_list(img_filenames, save_state=True)
             strict = True
         if len(csv_filenames) > 0:
             self._open_contour_list(csv_filenames, strict)
@@ -195,6 +203,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._input_data['image names'].clear()
         self._input_data['images'].clear()
         self._input_data['contours'].clear()
+        self._input_data['colors'].clear()
 
     def _setup_layout(self):
         frame = Qt.QFrame()
@@ -234,12 +243,17 @@ class MainWindow(QtWidgets.QMainWindow):
                     toolTip='Save segmentation results (contours-annotations)',
                     triggered=self._save_data)
 
+        self.delete_all_act = QtWidgets.QAction('Delete Annotations', self,
+                                      statusTip='Delete all annotations on current image', triggered=self._delete_all)
+
         quit = QtWidgets.QAction('Exit', self, shortcut=QtGui.QKeySequence.Quit,
                      toolTip="Quit the application", triggered=self._quit)
 
         file_menu = self.menuBar().addMenu("&File")
         file_menu.addAction(self.open_image_act)
         file_menu.addAction(self.save_data_act)
+        file_menu.addSeparator()
+        file_menu.addAction(self.delete_all_act)
         file_menu.addSeparator()
         file_menu.addAction(quit)
 
@@ -349,6 +363,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.undo_act.setEnabled(False)
         settings_bar.addSeparator()
         #
+        self.voronoi_act = QtWidgets.QAction('Voronoi', shortcut='Ctrl+V',
+                icon=qt_icon('Voronoi'), toolTip='Toggle Voronoi Diagram display',
+                checkable=True, checked=False,
+                triggered=self._toggle_voronoi)
+        settings_bar.addAction(self.voronoi_act)
+        #
         segmentation_setup_group = QtWidgets.QGroupBox()
         segmentation_setup_layout = QtWidgets.QGridLayout()
         self.contour_pts_checkbox = contour_pts_checkbox = QtWidgets.QCheckBox('Contour visibility')
@@ -446,7 +466,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.saveState()
             self._open_image_list(img_list, ann_list, no_ann)
     #
-    def _open_image_list(self, img_filenames, ann_filenames=None, no_ann=False):
+    def _open_image_list(self, img_filenames, ann_filenames=None, no_ann=False, save_state=False):
         img_dir = None
         err_files = []
         if len(img_filenames) is not 0:
@@ -461,6 +481,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._input_data['images'].append(itk_img)
                 self._input_data['image file paths'].append(img_name)
                 self._input_data['image names'].append(os.path.splitext(os.path.basename(img_name))[0])
+                self._input_data['colors'].append((127.5, 255.))
 
                 if img_dir is None:
                     img_dir = os.path.abspath(os.path.dirname(img_name))
@@ -508,6 +529,9 @@ class MainWindow(QtWidgets.QMainWindow):
             #
             if img_dir is None:
                 img_dir = ''
+            elif save_state:
+                self.saveDir = self.loadDir = QtCore.QDir(img_dir)
+                self.saveState()
             self._status_bar.showMessage(img_dir)
         if len(err_files) > 0:
             if len(err_files) > 5:
@@ -567,6 +591,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._file_list.currentRow() > 0:
             self._file_list.setCurrentRow(self._file_list.currentRow() - 1)
     def _file_list_row_changed(self, newrow):
+        if self._cur_img_id >= 0 and self._cur_img_id < len(self._input_data['colors']):
+            self._input_data['colors'][self._cur_img_id] = self._image_view.color_info
         self._cur_img_id = newrow
         self._display_image(self._cur_img_id)
     #
@@ -576,6 +602,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if idx < 0 or idx >= len(self._input_data['images']):
             return
         self._image_view.set_image(self._input_data['images'][idx])
+        self._image_view.color_info = self._input_data['colors'][idx]
         self._image_view.set_contours(self._input_data['contours'][idx])
         self.contour_pts_checkbox.setChecked(True)
         self._image_view.reset_view(True)
@@ -678,6 +705,8 @@ class MainWindow(QtWidgets.QMainWindow):
             elif e.op == UndoOp.Removed:
                 contours.append(e.data)
                 modified = True
+            elif e.op == UndoOp.Image:
+                self._image_view.color_info = e.data
             if e.last: break
         if modified:
             self._image_view.set_contours(contours)
@@ -688,9 +717,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self._undo_buf.append(UndoEntry(op, last, data))
         self.undo_act.setEnabled(True)
     #
+    def push_color_undo(self, ci):
+        self._undo_buf.append(UndoEntry(UndoOp.Image, True, ci))
+        self.undo_act.setEnabled(True)
+    #
     def clear_undo(self):
         self._undo_buf.clear()
         self.undo_act.setEnabled(False)
+    #
+    def _toggle_voronoi(self):
+        self._image_view.voronoi = self.voronoi_act.isChecked()
+        self.saveState()
     #
     def AddContour(self, contour_pts):
         if self._cur_img_id == -1:
@@ -777,6 +814,22 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.saveState()
         except Exception as ex:
             display_error('Error saving data', ex)
+    #
+    def _delete_all(self):
+        id = self._cur_img_id
+        if id < 0: return
+        if len(self._input_data['contours'][id]) == 0: return
+        if not askYesNo('Confirm',
+                'You are about to delete all annotations \non the current image.',
+                detail='This operation can not be undone. \nContinue?'):
+            return
+        self._image_view.cancel_editing()
+        self.clear_undo()
+        self.contour_pts_checkbox.setChecked(True)
+        self._input_data['contours'][id] = []
+        self._image_view.set_contours(self._input_data['contours'][id])
+        self._image_view.reset_view(False)
+        self.SaveHistory()
 
     def _quit(self, event):
         self.close()

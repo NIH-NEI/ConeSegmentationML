@@ -3,7 +3,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 import AOConfig as cfg
 
 cfg.APP_NAME = 'Cone Segmentation (ML)'
-cfg.APP_VERSION = '1.0.5 (2021-09-30)'
+cfg.APP_VERSION = '1.0.6 (2022-03-12)'
 
 if __name__ == '__main__':
     try:
@@ -21,7 +21,7 @@ if __name__ == '__main__':
         flist = cfg.InputList(sys.argv[1:])
         img_filenames = flist.get_files(('.tif', '.tiff'))
         if len(img_filenames) > 0:
-            window._open_image_list(img_filenames)
+            window._open_image_list(img_filenames, save_state=True)
             csv_filenames = flist.get_files('.csv')
             if len(csv_filenames) > 0:
                 window._open_contour_list(csv_filenames)
