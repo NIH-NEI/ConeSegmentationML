@@ -1,11 +1,19 @@
-#### Version 1.0.6 (2022-03-12) ####
+#### Version 1.0.6x (2022-03-12) ####
 
+- (Experimental) Added "Freeze" button to purge all annotation sets except the current,
+  i.e. corresponding to the selected value of "Level-set iterations" segmentation parameter.
 - Added "Voronoi" button in the toolbar to toggle Voronoi Diagram display.
 - Added "Restore Defaults" button to the "Cone segmentation" dialog.
 - Added "File"->"Delete Annotations" menu to erase all annotations on the current image.
 - Drag and drop sets the default output directory to where images were dragged from.
 - Brightness/Contrast is adjusted separately on each image and not carried over to other images.
 - Brightness/Contrast changes can be undone with the “Redo” button.
+
+#### Version 1.0.5x (2021-12-10) ####
+
+- (Experimental) Added an option for selecting a range of values for "Level-set iterations" segmentation parameter.
+  When selected, multiple results are produced for the specified range, and a slider on the main screen is enabled
+  to allow users to browse across different results.
 
 #### Version 1.0.5 (2021-09-30) ####
 

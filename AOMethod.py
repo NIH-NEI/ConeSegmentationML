@@ -51,6 +51,70 @@ scanning_img_cols = 333
 #     plt.imshow(image, cmap='gray')
 #     plt.show()
 
+class MultiContourList(object):
+    def __init__(self):
+        self._contours_map = {}
+        self._current_index = None
+    #
+    def keys(self):
+        return sorted(self._contours_map.keys())
+    #
+    def add_key(self, key, value_list):
+        self._contours_map[key] = value_list
+        if self._current_index is None:
+            self._current_index = 0
+    #
+    def delete_key(self, key):
+        if key in self._contours_map:
+            del self._contours_map[key]
+    #
+    @property
+    def current_index(self):
+        return self._current_index
+    @current_index.setter
+    def current_index(self, idx):
+        if idx >= 0 and idx < len(self._contours_map):
+            self._current_index = idx
+    #
+    @property
+    def current_key(self):
+        try:
+            return self.keys()[self.current_index]
+        except Exception:
+            return None
+    #
+    @property
+    def contours(self):
+        k = self.current_key
+        if not k is None:
+            return self._contours_map[k]
+        return []
+    #
+    @contours.setter
+    def contours(self, upd_contours):
+        k = self.current_key
+        if not k is None:
+            self._contours_map[k] = upd_contours
+    #
+    def __len__(self):
+        return len(self.contours)
+    #
+    def __getitem__(self, idx):
+        return self.contours.__getitem__(idx)
+    #
+    def __setitem__(self, idx, val):
+        self.contours.__setitem__(idx, val)
+    #
+    def __delitem__(self, idx):
+        self.contours.__delitem__(idx)
+    #
+    def __iter__(self):
+        return self.contours.__iter__()
+    #
+    def append(self, val):
+        self.contours.append(val)
+    #
+
 
 class ao_method():
     def __init__(self):
@@ -597,12 +661,19 @@ class ao_method():
 
         return res_contours
 
-    def segment_cones(self, model_weights, itk_img, fov, iteration_num, contour_length):
+    def segment_cones(self, model_weights, itk_img, fov, levelset_iterations, contour_length):
         if not os.path.isfile(model_weights['contours']) \
                 or not os.path.isfile(model_weights['regions']) \
                 or not os.path.isfile(model_weights['centroids']):
             raise ValueError('could not load centroid, contour, and region weights')
 
+        if isinstance(levelset_iterations, (list, tuple)):
+            start, end, step = tuple(levelset_iterations)
+            levelset_iterations = (start, end+1, step)
+        else:
+            iteration_num = int(levelset_iterations)
+            levelset_iterations = (iteration_num, iteration_num+1, 1)
+            
         # training fov is 0.75, we need to compute fov ratio difference first
         fov_ratio = fov / 0.75
 
@@ -663,21 +734,27 @@ class ao_method():
         binary_masks = self._create_initial_binary_masks(itk_four_color_img, itk_region_binary_img)
 
         # level-set segmentation
-        res_contours = self._extract_cell_contours(binary_masks, itk_contour_prob_img, cell_info['centroid'],
-                                    iteration_num, contour_length)
+        res = MultiContourList()
+        for iteration_num in range(*levelset_iterations):
+            start_ts = datetime.datetime.now()
+            res_contours = self._extract_cell_contours(binary_masks,
+                    itk_contour_prob_img, cell_info['centroid'], iteration_num, contour_length)
+            # scale res_contours based on the fov_ratio
+            for contour_pts in res_contours:
+                for pt in contour_pts:
+                    pt[0] = pt[0] / fov_ratio
+                    pt[1] = pt[1] / fov_ratio
+            res.add_key(iteration_num, res_contours)
+            elapsed = datetime.datetime.now() - start_ts
+            print('Extract %d cell contours at #iter=%d done in %s' % \
+                  (len(res_contours), iteration_num, str(elapsed)))
 
-        # scale res_contours based on the fov_ratio
-        for contour_pts in res_contours:
-            for pt in contour_pts:
-                pt[0] = pt[0] / fov_ratio
-                pt[1] = pt[1] / fov_ratio
-
-        # image_origin = itk_img.GetOrigin()
-        # image_spacing = itk_img.GetSpacing()
-        # for contour_pts in res_contours:
-        #     for pt in contour_pts:
-        #         pt[0] = image_origin[0] + image_spacing[0] * pt[0]
-        #         pt[1] = image_origin[1] + image_spacing[1] * pt[1]
-
-        return res_contours
-
+        sz = len(res.keys())
+        if sz == 0:
+            return []
+        elif sz == 1:
+            return res.contours
+        #
+        res.current_index = sz // 2
+        return res
+    #

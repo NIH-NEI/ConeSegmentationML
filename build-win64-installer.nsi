@@ -1,18 +1,18 @@
 
-!define VERSION "1.0.6"
+!define VERSION "1.0.6x"
 !define PATCH  "1"
-!define INST_DIR "dist\ConeSegmentationML"
+!define INST_DIR "dist\ConeSegmentationML-X"
 
 Var START_MENU
 
 !include "MUI2.nsh"
 
 # set "Program Files" as install directory
-InstallDir $PROGRAMFILES64\ConeSegmentationML
+InstallDir $PROGRAMFILES64\ConeSegmentationML-X
  
 ;define installer name
-Name "Cone Segmentation (ML) 1.0.6"
-OutFile "dist\ConeSegmentationML-1.0.6-win64.exe"
+Name "Cone Segmentation (ML) 1.0.6x"
+OutFile "dist\ConeSegmentationML-1.0.6x-win64.exe"
 
 ;SetCompressor lzma
 
@@ -26,7 +26,7 @@ Function ConditionalAddToRegisty
   Pop $0
   Pop $1
   StrCmp "$0" "" ConditionalAddToRegisty_EmptyString
-    WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML)" \
+    WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML) X" \
     "$1" "$0"
     ;MessageBox MB_OK "Set Registry: '$1' to '$0'"
     DetailPrint "Set install registry entry: '$1' to '$0'"
@@ -57,16 +57,16 @@ SetOutPath $INSTDIR
 # specify file to go in output path
 File /r dist\ConeSegmentationML\*.*
 
-WriteRegStr SHCTX "Software\National Eye Institute\Cone Segmentation (ML)" "" $INSTDIR
+WriteRegStr SHCTX "Software\National Eye Institute\Cone Segmentation (ML) X" "" $INSTDIR
  
 # define uninstaller name
 WriteUninstaller $INSTDIR\uninstall.exe
 
 Push "DisplayName"
-Push "Cone Segmentation (ML)"
+Push "Cone Segmentation (ML) X"
 Call ConditionalAddToRegisty
 Push "DisplayVersion"
-Push "1.0.6"
+Push "1.0.6x"
 Call ConditionalAddToRegisty
 Push "Publisher"
 Push "National Eye Institute"
@@ -83,9 +83,9 @@ Call ConditionalAddToRegisty
   
 ;Create shortcuts
 CreateDirectory "$SMPROGRAMS\Cone Segmentation (ML)"
-CreateShortCut "$SMPROGRAMS\Cone Segmentation (ML)\Cone Segmentation (ML).lnk" "$INSTDIR\__main__.exe"
-CreateShortCut "$SMPROGRAMS\Cone Segmentation (ML)\Uninstall Cone Segmentation (ML).lnk" "$INSTDIR\uninstall.exe"
-CreateShortCut "$DESKTOP\Cone Segmentation (ML).lnk" "$INSTDIR\__main__.exe"
+CreateShortCut "$SMPROGRAMS\Cone Segmentation (ML)\Cone Segmentation (ML) X.lnk" "$INSTDIR\__main__.exe"
+CreateShortCut "$SMPROGRAMS\Cone Segmentation (ML)\Uninstall Cone Segmentation (ML) X.lnk" "$INSTDIR\uninstall.exe"
+CreateShortCut "$DESKTOP\Cone Segmentation (ML) X.lnk" "$INSTDIR\__main__.exe"
 
 ; Write special uninstall registry entries
 Push "StartMenu"
@@ -104,7 +104,7 @@ Section "Uninstall"
 SetShellVarContext all
  
 ReadRegStr $START_MENU SHCTX \
-   "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML)" "StartMenu"
+   "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML) X" "StartMenu"
 
  
 # Always delete uninstaller first
@@ -114,19 +114,19 @@ Delete $INSTDIR\uninstall.exe
 RMDir /r /REBOOTOK $INSTDIR
 
 ; Remove the registry entries.
-DeleteRegKey SHCTX "Software\National Eye Institute\Cone Segmentation (ML)"
-DeleteRegKey SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML)"
+DeleteRegKey SHCTX "Software\National Eye Institute\Cone Segmentation (ML) X"
+DeleteRegKey SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML) X"
 
-Delete "$SMPROGRAMS\Cone Segmentation (ML)\Uninstall Cone Segmentation (ML).lnk"
-Delete "$SMPROGRAMS\Cone Segmentation (ML)\Cone Segmentation (ML).lnk"
-Delete "$DESKTOP\Cone Segmentation (ML).lnk"
+Delete "$SMPROGRAMS\Cone Segmentation (ML)\Uninstall Cone Segmentation (ML) X.lnk"
+Delete "$SMPROGRAMS\Cone Segmentation (ML)\Cone Segmentation (ML) X.lnk"
+Delete "$DESKTOP\Cone Segmentation (ML) X.lnk"
 
-DeleteRegKey /ifempty SHCTX "Software\National Eye Institute\Cone Segmentation (ML)"
+DeleteRegKey /ifempty SHCTX "Software\National Eye Institute\Cone Segmentation (ML) X"
 
 SectionEnd
 
 Function .onInit
-  ReadRegStr $0 SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML)" "UninstallString"
+  ReadRegStr $0 SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cone Segmentation (ML) X" "UninstallString"
   StrCmp $0 "" inst
 
   MessageBox MB_YESNOCANCEL|MB_ICONEXCLAMATION \
