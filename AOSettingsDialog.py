@@ -1,3 +1,6 @@
+__all__ = ('BASE_DIR', 'ICONS_DIR', 'HELP_DIR', 'qt_icon', 'display_error', 'display_warning', 'askYesNo',
+        'ao_progress_dialog', 'ao_open_dialog', 'ao_loc_dialog', 'ao_parameter_dialog',)
+
 import os
 import sys
 import time
@@ -7,9 +10,14 @@ import traceback
 from PyQt5 import QtCore, QtWidgets, QtGui
 
 if hasattr(sys, '_MEIPASS'):
-    icon_dir = os.path.join(sys._MEIPASS, 'Icons')
+    BASE_DIR = sys._MEIPASS
 else:
-    icon_dir = os.path.join(os.path.dirname(__file__), 'Icons')
+    BASE_DIR = os.path.dirname(__file__)
+ICONS_DIR = os.path.join(BASE_DIR, 'Icons')
+HELP_DIR = os.path.join(BASE_DIR, 'Help')
+
+def qt_icon(name):
+    return QtGui.QIcon(os.path.join(ICONS_DIR, name))
 
 def display_error(err, ex):
     msg = QtWidgets.QMessageBox()
@@ -281,12 +289,15 @@ class ao_open_dialog(QtWidgets.QDialog):
         file_dialog.setLabelText(QtWidgets.QFileDialog.Accept, 'Select')
         file_dialog.setWindowFilePath(QtCore.QDir.homePath())
         file_dialog.setDirectory(self.loadDir)
-        file_dialog.exec()
+        rc = file_dialog.exec_()
+        if not rc:
+            return False
 
         img_filenames = file_dialog.selectedFiles()
         if not img_filenames:
-            return
+            return False
         self.annDir = self.setImageList(img_filenames)
+        return True
     #
     def _on_img_btn(self, e):
         self.selectImageFiles()
@@ -456,7 +467,7 @@ This parameter should be scaled if the pixel sampling differs."""
     def _setup_layout(self):
         self.setWindowTitle('Cone segmentation')
         
-        qmark = QtGui.QPixmap(os.path.join(icon_dir, 'help_small.png'));
+        qmark = QtGui.QPixmap(os.path.join(ICONS_DIR, 'help_small.png'));
         
 #         segmentation_method_label = QtWidgets.QLabel('Segmentation method:')
 #         #self._segmentation_method_box = QtWidgets.QComboBox()

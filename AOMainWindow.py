@@ -16,18 +16,10 @@ import AOImageView
 from AOImageView import MouseOp
 import AOFileIO
 import AOMethod
-import AOSettingsDialog
-from AOSettingsDialog import ao_open_dialog, ao_parameter_dialog
-from AOSettingsDialog import ao_progress_dialog, ao_loc_dialog
-from AOSettingsDialog import display_error, display_warning, askYesNo
+from AOSettingsDialog import *
+from AODisplay import ao_display_settings
 from AOSnap import ao_snap_dialog
 import AOConfig as cfg
-
-BASE_DIR = os.path.dirname(__file__)
-ICONS_DIR = os.path.join(BASE_DIR, 'Icons')
-HELP_DIR = os.path.join(BASE_DIR, 'Help')
-def qt_icon(name):
-    return QtGui.QIcon(os.path.join(ICONS_DIR, name))
 
 _big_icon = QtCore.QUrl.fromLocalFile(os.path.join(ICONS_DIR, 'ConeSegmentationML256.png'))
 about_html = '''
@@ -75,6 +67,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.setWindowIcon(qt_icon('ConeSegmentationML.png'))
 
+        self._mute = True
         self._input_data = {
             'image file paths': [],
             'image names': [],
@@ -114,6 +107,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._segmentation_para_dlg = ao_parameter_dialog(self)
         self._segmentation_para_dlg.setMinimumSize(geom.width()*24//100, geom.height()//4)
+        self._display_settings_dlg = ao_display_settings(self)
+        self._display_settings_dlg.changed.connect(self._on_display_settings)
         self._progress_dlg = ao_progress_dialog(self)
         self._progress_dlg.setMinimumWidth(geom.width()/5)
         self._file_io = AOFileIO.ao_fileIO()
@@ -127,19 +122,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._status_bar.showMessage('Press F1 for help.')
         self.loadState()
         self.setAcceptDrops(True)
+        self._mute = False
     #
     def loadState(self):
         try:
             with open(self.state_file, 'r') as fi:
                 jobj = json.load(fi)
-            if 'interpolation' in jobj:
-                self._image_view.interpolation = jobj['interpolation']
-                self.toggle_interpolation.setChecked(self._image_view.interpolation)
-            if jobj.get('voronoi', False):
-                self._image_view.voronoi = True
-                self.voronoi_act.setChecked(True)
-            if 'contour_width' in jobj:
-                self._contour_width_input.setValue(int(jobj['contour_width']))
+            if 'displaySettings' in jobj:
+                self._image_view.displaySettings = jobj['displaySettings']
             self._segmentation_para_dlg.set_state(jobj['segmentation_para'])
             if 'loadDir' in jobj:
                 self.loadDir = QtCore.QDir(jobj['loadDir'])
@@ -147,6 +137,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.saveDir = QtCore.QDir(jobj['saveDir'])
         except Exception:
             pass
+        self._sync_display_controls()
     def saveState(self):
         try:
             ldir = self.loadDir.canonicalPath()
@@ -159,9 +150,7 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             jobj = {
                 'segmentation_para': self._segmentation_para_dlg.get_state(),
-                'contour_width': self._contour_width_input.value(),
-                'interpolation': self._image_view.interpolation,
-                'voronoi': True if self._image_view.voronoi else False,
+                'displaySettings': self._image_view.displaySettings,
             }
             if not ldir is None:
                 jobj['loadDir'] = ldir
@@ -195,7 +184,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _set_mouse_mode(self, m):
         self._image_view._style.mouse_mode = m
         self._image_view.cancel_editing()
-        self.contour_pts_checkbox.setChecked(True)
+        self._image_view.visibility = True
+        self._sync_display_controls()
     #
     def _initialize_input_data(self):
         self._image_view.abort_editing()
@@ -258,9 +248,16 @@ class MainWindow(QtWidgets.QMainWindow):
         file_menu.addAction(quit)
 
         self.toggle_visibility = QtWidgets.QAction('Annotation Visibility', self, shortcut='F2',
+                    iconText='Show', icon=qt_icon('fovea'),
                     checkable=True, checked=True,
-                    statusTip='Toggle Annotation Visibility (F2)',
+                    statusTip='Show/Hide all annotations (F2)',
+                    toolTip='Show/Hide all annotations (F2)',
                     triggered=self._toggle_visibility)
+
+        self.voronoi_act = QtWidgets.QAction('Voronoi', shortcut='Ctrl+V',
+                icon=qt_icon('Voronoi'), statusTip='Toggle Voronoi Diagram display (Ctrl+V)',
+                checkable=True, checked=False,
+                triggered=self._toggle_voronoi)
 
         self.toggle_interpolation = QtWidgets.QAction('Image Interpolation', self, shortcut='Ctrl+I',
                     checkable=True, checked=True,
@@ -277,6 +274,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         view_menu = self.menuBar().addMenu("&View")
         view_menu.addAction(self.toggle_visibility)
+        view_menu.addAction(self.voronoi_act)
         view_menu.addAction(self.toggle_interpolation)
         view_menu.addSeparator()
         view_menu.addAction(self.reset_brightness_contrast)
@@ -284,7 +282,8 @@ class MainWindow(QtWidgets.QMainWindow):
         view_menu.addSeparator()
         self.snap_annotated_act = QtWidgets.QAction('Snapshot...', self, shortcut='F7',
                     icon=qt_icon('camera'),
-                    statusTip='Take a snapshot of the current image with annotations',
+                    statusTip='Take a snapshot of the current image with annotations (F7)',
+                    toolTip='Take a snapshot of the current image with annotations (F7)',
                     triggered=self._snap_annotated)
         view_menu.addAction(self.snap_annotated_act)
 
@@ -363,32 +362,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.undo_act.setEnabled(False)
         settings_bar.addSeparator()
         #
-        self.voronoi_act = QtWidgets.QAction('Voronoi', shortcut='Ctrl+V',
-                icon=qt_icon('Voronoi'), toolTip='Toggle Voronoi Diagram display',
-                checkable=True, checked=False,
-                triggered=self._toggle_voronoi)
-        settings_bar.addAction(self.voronoi_act)
-        #
-        segmentation_setup_group = QtWidgets.QGroupBox()
-        segmentation_setup_layout = QtWidgets.QGridLayout()
-        self.contour_pts_checkbox = contour_pts_checkbox = QtWidgets.QCheckBox('Contour visibility')
-        contour_pts_checkbox.setChecked(True)
-        contour_pts_checkbox.stateChanged.connect(self._set_contour_points_visibility)
-        #
-        contour_size_label = QtWidgets.QLabel('Contour width: ')
-        self._contour_width_input = QtWidgets.QSpinBox()
-        self._contour_width_input.setMinimum(1)
-        self._contour_width_input.setMaximum(100)
-        self._contour_width_input.setValue(2)
-        self._contour_width_input.valueChanged.connect(self._set_contour_width)
-        segmentation_setup_layout.addWidget(contour_pts_checkbox, 0, 0, 1, 2)
-        segmentation_setup_layout.addWidget(contour_size_label, 1, 0)
-        segmentation_setup_layout.addWidget(self._contour_width_input, 1, 1)
-        segmentation_setup_group.setLayout(segmentation_setup_layout)
-        #
-        settings_bar.addWidget(segmentation_setup_group)
-        
+        settings_bar.addAction(self.toggle_visibility)
+        self.disp_act = QtWidgets.QAction('Settings', shortcut='F5',
+                icon=qt_icon('settings'), toolTip='Change Display Settings (F5)',
+                triggered=self._show_display_settings)
+        settings_bar.addAction(self.disp_act)
+        settings_bar.addAction(self.snap_annotated_act)
         settings_bar.addSeparator()
+        #
         segment_button = QtWidgets.QToolButton()
         segment_button.setToolTip("Segment cones")
         segment_button.setIcon(qt_icon('segment'))
@@ -437,13 +418,10 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg.setImageData(
             self._input_data['image file paths'][self._cur_img_id],
             img_data=self._input_data['images'][self._cur_img_id],
-            interpolation=self._image_view.interpolation,
+            displaySettings=self._image_view.displaySettings,
+            colorInfo=self._image_view.color_info,
         )
-        dlg.setContours(
-            self._input_data['contours'][self._cur_img_id],
-            contour_width=self._image_view._contour_width,
-            contour_color=(0, 0xFF, 0),
-        )
+        dlg.setContours(self._input_data['contours'][self._cur_img_id])
         dlg.exec_()
     #
     def _open_images(self):
@@ -454,7 +432,8 @@ class MainWindow(QtWidgets.QMainWindow):
             dlg.setCheckedImages(self._input_data['image file paths'])
         except Exception:
             pass
-        dlg.selectImageFiles()
+        rc = dlg.selectImageFiles()
+        if not rc: return
         rc = dlg.exec_()
         if not rc: return
         img_list = dlg.getImageList()
@@ -604,7 +583,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._image_view.set_image(self._input_data['images'][idx])
         self._image_view.color_info = self._input_data['colors'][idx]
         self._image_view.set_contours(self._input_data['contours'][idx])
-        self.contour_pts_checkbox.setChecked(True)
+        #self.contour_pts_checkbox.setChecked(True)
+        self._image_view.visibility = True
+        self._sync_display_controls()
         self._image_view.reset_view(True)
 
     def _segment_cone_cells(self):
@@ -631,7 +612,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._image_view.cancel_editing()
         self.clear_undo()
-        self.contour_pts_checkbox.setChecked(True)
+        #self.contour_pts_checkbox.setChecked(True)
+        self._image_view.visibility = True
+        self._sync_display_controls()
 
 #         window_title = cfg.APP_NAME + ': ' + self._segmentation_para_dlg.segmentation_method
 #         self.setWindowTitle(window_title)
@@ -681,9 +664,20 @@ class MainWindow(QtWidgets.QMainWindow):
         img = self._input_data['images'][i]
         self._file_io.write_contour(history_file_name, contours, img.GetOrigin(), img.GetSpacing())
     #
+    def _sync_display_controls(self):
+        self._mute = True
+        self.toggle_interpolation.setChecked(self._image_view.interpolation)
+        self.voronoi_act.setChecked(self._image_view.voronoi)
+        self.toggle_visibility.setChecked(self._image_view.visibility)
+        self._mute = False
+    def _on_display_settings(self, param):
+        self._image_view.displaySettings = param
+        self._sync_display_controls()
+    #
     def _undo(self, e):
         self._image_view.cancel_editing()
-        self.contour_pts_checkbox.setChecked(True)
+        self._image_view.visibility = True
+        self._sync_display_controls()
         self.do_undo()
     #
     def do_undo(self):
@@ -726,8 +720,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.undo_act.setEnabled(False)
     #
     def _toggle_voronoi(self):
-        self._image_view.voronoi = self.voronoi_act.isChecked()
-        self.saveState()
+        if not self._mute:
+            self._image_view.voronoi = self.voronoi_act.isChecked()
+            self.saveState()
     #
     def AddContour(self, contour_pts):
         if self._cur_img_id == -1:
@@ -825,7 +820,9 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self._image_view.cancel_editing()
         self.clear_undo()
-        self.contour_pts_checkbox.setChecked(True)
+        #self.contour_pts_checkbox.setChecked(True)
+        self._image_view.visibility = True
+        self._sync_display_controls()
         self._input_data['contours'][id] = []
         self._image_view.set_contours(self._input_data['contours'][id])
         self._image_view.reset_view(False)
@@ -834,28 +831,24 @@ class MainWindow(QtWidgets.QMainWindow):
     def _quit(self, event):
         self.close()
 
-    def _set_contour_points_visibility(self, state):
-        self._image_view.contour_visibility = state
-        self._image_view.reset_view()
-        self.toggle_visibility.setChecked(state)
-    #
     def _toggle_visibility(self):
-        state = 0 if self._image_view.contour_visibility else 1
-        self.contour_pts_checkbox.setChecked(state)
+        if not self._mute:
+            self._image_view.visibility = self.toggle_visibility.isChecked()
     #
     def _toggle_interpolation(self):
-        self._image_view.interpolation = self.toggle_interpolation.isChecked()
-        self._image_view.reset_view()
-        self.saveState()
+        if not self._mute:
+            self._image_view.interpolation = self.toggle_interpolation.isChecked()
+            self._image_view.reset_view()
+            self.saveState()
     #
     def _reset_brightness_contrast(self):
         self._image_view.reset_color()
         self._image_view.reset_view(True)
     #
-    def _set_contour_width(self):
-        self._image_view.set_contour_width(self._contour_width_input.value())
-        self._image_view.reset_view()
-        self.saveState()
-
     def _show_settigns_dialog(self):
         self._settings.show()
+    #
+    def _show_display_settings(self, e):
+        self._display_settings_dlg.displaySettings = self._image_view.displaySettings
+        self._display_settings_dlg.exec_()
+    #
