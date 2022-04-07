@@ -1,9 +1,23 @@
+#### Version 1.0.8 (2022-04-07) ####
+
+- Experimental option of multiple values for "Levelset iterations" is merged into the main version.
+  It is disabled by default, but can be enabled via menu "File" -> "Advanced Options" -> "Multiple levelset iterations".
+  When enabled, an additional set of controls is displayed on the main screen, and an option for selecting a range
+  of values for "Level-set iterations" segmentation parameter is shown inj the Segmentation dialog.
+  If this option is selected, multiple results are produced for the specified range, and a slider on the main screen
+  is enabled to allow users to browse across different results. The "Freeze" button can be used to purge all annotation
+  sets except the current one. Besically, use the slider to find the "best" result, then press "Freeze" to keep it, and
+  remove other results.
+- Snapshot dialog: added "Source image" checkbox. If unchecked, the source image is replaced with a solid background
+  colored with the "Background" color.
+- Hyperlinks in About box. 
+
 #### Version 1.0.7 (2022-04-04) ####
 
 - Cone centers are displayed (as "cross" glyphs).
 - Display settings (visibility, size, color) are consolidated in a single dialog box, accessible
   via menu "View"->"Settings", tool button "Settings", or keyboard shortcut F5.
-- F2 now temporarily toggles on/off visibility of all annotations (contours, center glyphs, Voronoi diagram).
+- F2 now temporarily togles on/off visibility of all annotations (contours, center glyphs, Voronoi diagram).
 - The "Snapshot" feature modified to scale all elements proportionally (i.e. at x5 all lines become 5 times thicker).
 
 #### Version 1.0.6 (2022-03-12) ####

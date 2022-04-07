@@ -9,13 +9,12 @@ from scipy.spatial import Voronoi
 import SimpleITK as sitk
 from PyQt5 import QtCore, QtWidgets, QtGui
 
-from AODisplay import ao_display_settings
+from AODisplay import AoColorButton, ao_display_settings
 from AOUtil import SegmentClipper, contourCenter
 
 class ao_snap_dialog(QtWidgets.QDialog):
     IMG_SCALES = [50, 100, 200, 300, 500, 1000, 1500, 2000]
-    save_geom = None
-    save_scale = 2.
+    save_state = None
     def __init__(self, parent=None):
         super(ao_snap_dialog, self).__init__(parent)
         self.setWindowFlags(self.windowFlags() & ~QtCore.Qt.WindowContextHelpButtonHint)
@@ -59,7 +58,7 @@ class ao_snap_dialog(QtWidgets.QDialog):
         self.img_lab.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
         imgLayout.addWidget(self.img_lab, 0, 0)
         #
-        sizePane = QtWidgets.QGroupBox('Output Image Size')
+        sizePane = QtWidgets.QGroupBox('Output Image Options')
         sizeLayout = QtWidgets.QGridLayout()
         sizePane.setLayout(sizeLayout)
         ctl_layout.addWidget(sizePane, 0, 0)
@@ -85,14 +84,28 @@ class ao_snap_dialog(QtWidgets.QDialog):
         self.txHeight.setStyleSheet('QLineEdit {width: 10en;}')
         sizeLayout.addWidget(self.txHeight, 2, 1)
         #
+        srcLayout = QtWidgets.QGridLayout()
+        srcLayout.setColumnStretch(0, 1)
+        srcLayout.setColumnStretch(1, 0)
+        ctl_layout.addLayout(srcLayout, 1, 0)
+        self.cbBkg = QtWidgets.QCheckBox('Source image', stateChanged=self.onBkgImage)
+        self.cbBkg.setChecked(True)
+        srcLayout.addWidget(self.cbBkg, 0, 0, 1, 2)
+        
+        lbBkgColor = QtWidgets.QLabel('Background:')
+        srcLayout.addWidget(lbBkgColor, 1, 0)
+        self.btBkgColor = AoColorButton(onchange=self.onBkgColor)
+        self.btBkgColor.color = '#000000'
+        srcLayout.addWidget(self.btBkgColor, 1, 1)
+        #
         spaceLab = QtWidgets.QLabel(' ')
-        ctl_layout.addWidget(spaceLab, 1, 0)
+        ctl_layout.addWidget(spaceLab, 2, 0)
         #
         btnLayout = QtWidgets.QGridLayout()
         btnLayout.setColumnStretch(0, 0)
         btnLayout.setColumnStretch(1, 1)
         btnLayout.setColumnStretch(2, 0)
-        ctl_layout.addLayout(btnLayout, 2, 0)
+        ctl_layout.addLayout(btnLayout, 3, 0)
         self.btnDisp = QtWidgets.QPushButton('Settings')
         btnLayout.addWidget(self.btnDisp, 0, 0)
         self.btnSave = QtWidgets.QPushButton('Save Image')
@@ -110,21 +123,57 @@ class ao_snap_dialog(QtWidgets.QDialog):
         self.btnClose.clicked.connect(self.close)
     #
     def closeEvent(self, e):
-        ao_snap_dialog.save_geom = self.geometry()
-        ao_snap_dialog.save_scale = self.out_scale
+        ao_snap_dialog.save_state = self.p_state
         QtWidgets.QDialog.closeEvent(self, e)
     def showEvent(self, e):
         QtWidgets.QDialog.showEvent(self, e)
-        if not self.save_geom is None:
-            self.setGeometry(self.save_geom)
-        else:
+        self._mute = True
+        self.p_state = ao_snap_dialog.save_state
+        self._mute = False
+        self._sync_output_size()
+        self.resizeEvent(None)
+    #
+    @property
+    def p_state(self):
+        return {
+            'geometry': self.geometry(),
+            'out_scale': self.out_scale,
+            'image_visible': self.image_visible,
+            'bkg_color': self.bkg_color,
+        }
+    @p_state.setter
+    def p_state(self, st):
+        try:
+            self.setGeometry(st['geometry'])
+            self.out_scale = st['out_scale']
+            self.image_visible = st['image_visible']
+            self.bkg_color = st['bkg_color']
+        except Exception:
             geom = QtWidgets.QApplication.primaryScreen().geometry()
             self.resize(geom.width() * 45 // 100, geom.height() * 60 // 100)
             self.move(geom.width() * 18 // 100, geom.height() * 18 // 100)
-            ao_snap_dialog.save_geom = self.geometry()
-        self.out_scale = ao_snap_dialog.save_scale
-        self._sync_output_size()
+    #
+    @property
+    def image_visible(self):
+        return self.cbBkg.isChecked()
+    @image_visible.setter
+    def image_visible(self, st):
+        return self.cbBkg.setChecked(st)
+    #
+    @property
+    def bkg_color(self):
+        return self.btBkgColor.color
+    @bkg_color.setter
+    def bkg_color(self, v):
+        self.btBkgColor.color = v
+    #
+    def onBkgImage(self):
+        if self._mute: return
         self.resizeEvent(None)
+    def onBkgColor(self, v):
+        if self._mute: return
+        if not self.image_visible:
+            self.resizeEvent(None)
     #
     def emptyImage(self):
         rgb_data = np.empty(shape=(16, 16, 3), dtype=np.uint8)
@@ -231,7 +280,7 @@ class ao_snap_dialog(QtWidgets.QDialog):
             'contour_color': '#00ff00',
             
             'glyph_visibility': False,
-            'glyph_size': 12.,
+            'glyph_size': 6.,
             'glyph_color': '#00ff00',
             
             'voronoi': False,
@@ -375,7 +424,7 @@ class ao_snap_dialog(QtWidgets.QDialog):
             (1, 1), (1, 5), (-1, 5),
             (-1, 1), (-5, 1), (-5, -1), ]
     def _scaled_glyph_poly(self, sc):
-        sc = sc * self.glyph_size * 0.055
+        sc = sc * self.glyph_size * 0.15
         return QtGui.QPolygon([QtCore.QPoint(x*sc, y*sc) for x, y in self.GLYPH_COORD])
     #
     def resizeEvent(self, e):
@@ -393,10 +442,14 @@ class ao_snap_dialog(QtWidgets.QDialog):
     def generateScaledPixmap(self, sc):
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
         
-        scImg = self.qImg.scaled(int(self.qImg.width()*sc), int(self.qImg.height()*sc),
-                transformMode=QtCore.Qt.SmoothTransformation if self.interpolation else QtCore.Qt.FastTransformation)
-        pixmap = QtGui.QPixmap.fromImage(scImg)
-        del scImg
+        if self.image_visible:
+            scImg = self.qImg.scaled(int(self.qImg.width()*sc), int(self.qImg.height()*sc),
+                    transformMode=QtCore.Qt.SmoothTransformation if self.interpolation else QtCore.Qt.FastTransformation)
+            pixmap = QtGui.QPixmap.fromImage(scImg)
+            del scImg
+        else:
+            pixmap = QtGui.QPixmap(int(self.qImg.width()*sc), int(self.qImg.height()*sc))
+            pixmap.fill(self.bkg_color)
 
         # Draw annotations
         painter = QtGui.QPainter(pixmap)

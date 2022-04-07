@@ -26,9 +26,9 @@ about_html = '''
 <table><tr>
 <td><img src="%s">&nbsp;&nbsp;</td>
 <td><b>%s %s</b><div>
-Tam lab<br>
-National Eye Institute<br>
-National Institutes of Health</div><div><br>
+<a href="https://nei.nih.gov/intramural/translational-imaging">Tam lab</a><br>
+<a href="https://nei.nih.gov/">National Eye Institute</a><br>
+<a href="https://www.nih.gov/">National Institutes of Health</a></div><div><br>
 Cone Segmentation (Machine Learning edition)<br><br>
 If any portion of this software is used, please<br>
 cite the following paper in your publication:
@@ -52,6 +52,7 @@ class AboutDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout()
         lbl = QtWidgets.QLabel(about_html)
         lbl.setTextFormat(QtCore.Qt.RichText)
+        lbl.setOpenExternalLinks(True)
         #
         buttonbox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok)
         buttonbox.accepted.connect(self.close)
@@ -130,11 +131,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 jobj = json.load(fi)
             if 'displaySettings' in jobj:
                 self._image_view.displaySettings = jobj['displaySettings']
-            self._segmentation_para_dlg.set_state(jobj['segmentation_para'])
+            self._segmentation_para_dlg.state = jobj['segmentation_para']
             if 'loadDir' in jobj:
                 self.loadDir = QtCore.QDir(jobj['loadDir'])
             if 'saveDir' in jobj:
                 self.saveDir = QtCore.QDir(jobj['saveDir'])
+            if 'extended' in jobj:
+                self.extended = jobj['extended']
         except Exception:
             pass
         self._sync_display_controls()
@@ -149,8 +152,9 @@ class MainWindow(QtWidgets.QMainWindow):
             sdir = None
         try:
             jobj = {
-                'segmentation_para': self._segmentation_para_dlg.get_state(),
+                'segmentation_para': self._segmentation_para_dlg.state,
                 'displaySettings': self._image_view.displaySettings,
+                'extended': self.extended,
             }
             if not ldir is None:
                 jobj['loadDir'] = ldir
@@ -218,10 +222,56 @@ class MainWindow(QtWidgets.QMainWindow):
         view_layout.setColumnStretch(0, 5)
         view_layout.setColumnStretch(1, 1)
 
+        ctl_layout = Qt.QGridLayout()
+        ctl_layout.setColumnStretch(0, 0)
+        ctl_layout.setColumnStretch(1, 10)
+        ctl_layout.setColumnStretch(2, 0)
+        ctl_layout.setColumnStretch(3, 0)
+        iter_lb = QtWidgets.QLabel('Levelset Iterations:')
+        ctl_layout.addWidget(iter_lb, 0, 0)
+        self.iter_sl = sl = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        sl.setRange(0, 9)
+        sl.setTickInterval(1)
+        sl.setTickPosition(QtWidgets.QSlider.TicksAbove)
+        sl.valueChanged.connect(self.onIterSlider)
+        ctl_layout.addWidget(sl, 0, 1)
+        self.iter_txt = QtWidgets.QLineEdit()
+        self.iter_txt.setReadOnly(True)
+        self.iter_txt.setMaximumWidth(150)
+        ctl_layout.addWidget(self.iter_txt, 0, 2)
+        self.iter_btn = QtWidgets.QPushButton("Freeze")
+        self.iter_btn.setToolTip('Freeze current set of annotations, purge the rest')
+        ctl_layout.addWidget(self.iter_btn, 0, 3)
+        self.iter_btn.clicked.connect(self.onIterFreeze)
+        
+        self.visible_x = [iter_lb, self.iter_sl, self.iter_txt, self.iter_btn]
+        for o in self.visible_x:
+            o.setVisible(False)
+        
+        view_layout.addLayout(ctl_layout, 1, 0, 1, 2)
+
+        self._iter_slider_status()
+        #
         frame.setLayout(view_layout)
         self.setCentralWidget(frame)
         self.show()
-
+    #
+    def _iter_slider_status(self, rng=None, pos=None, val=None):
+        if rng is None:
+            self.iter_sl.setRange(0, 1)
+            self.iter_sl.setValue(0)
+            self.iter_sl.setEnabled(False)
+            self.iter_txt.setText("")
+            self.iter_txt.setEnabled(False)
+            self.iter_btn.setEnabled(False)
+        else:
+            self.iter_sl.setRange(0, rng)
+            self.iter_sl.setValue(pos)
+            self.iter_sl.setEnabled(True)
+            self.iter_txt.setText(str(val))
+            self.iter_txt.setEnabled(True)
+            self.iter_btn.setEnabled(True)
+    #
     def _setup_menu(self):
         self.open_image_act = QtWidgets.QAction('Open...', self, shortcut=QtGui.QKeySequence.Open,
                     icon=qt_icon('open'),
@@ -238,12 +288,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
         quit = QtWidgets.QAction('Exit', self, shortcut=QtGui.QKeySequence.Quit,
                      toolTip="Quit the application", triggered=self._quit)
+        
+        self.experimental_act = QtWidgets.QAction('Multiple Levelset Iterations', self,
+                checkable=True, checked=False,
+                statusTip='Enable multiple values for the Levelset Iterations segmentation parameter',
+                triggered=self._toggle_extended)
 
         file_menu = self.menuBar().addMenu("&File")
         file_menu.addAction(self.open_image_act)
         file_menu.addAction(self.save_data_act)
         file_menu.addSeparator()
         file_menu.addAction(self.delete_all_act)
+        advMenu = file_menu.addMenu('Advanced Options')
+        advMenu.addAction(self.experimental_act)
         file_menu.addSeparator()
         file_menu.addAction(quit)
 
@@ -328,8 +385,8 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Mouse Op button group
         mouse_group = QtWidgets.QActionGroup(self)
-        default_act = QtWidgets.QAction('Default', mouse_group, shortcut='Ctrl+M',
-                icon=qt_icon('mouse'), toolTip='Default Mouse Mode (Ctrl+M)',
+        default_act = QtWidgets.QAction('Adjust', mouse_group, shortcut='Ctrl+M',
+                icon=qt_icon('mouse'), toolTip='Default Mouse Mode - adjust brightness/contrast (Ctrl+M)',
                 checkable=True, checked=True,
                 triggered=lambda: self._set_mouse_mode(MouseOp.Normal))
         settings_bar.addAction(default_act)
@@ -408,6 +465,50 @@ class MainWindow(QtWidgets.QMainWindow):
         
         helpWindow.showNormal()
     #
+    @property
+    def extended(self):
+        return self.experimental_act.isChecked()
+    @extended.setter
+    def extended(self, st):
+        self.experimental_act.setChecked(st)
+    #
+    def _toggle_extended(self):
+        try:
+            st = self.extended
+            for o in self.visible_x:
+                o.setVisible(st)
+        except Exception:
+            pass
+    #
+    def onIterSlider(self, v):
+        try:
+            self._image_view.cancel_editing()
+            self.clear_undo()
+            contours = self._input_data['contours'][self._cur_img_id]
+            contours.current_index = v
+            #self.contour_pts_checkbox.setChecked(True)
+            self._image_view.visibility = True
+            self._sync_display_controls()
+            self._set_contours(self._cur_img_id)
+            self.SaveHistory()
+        except Exception:
+            pass
+    #
+    def onIterFreeze(self):
+        try:
+            contours = self._input_data['contours'][self._cur_img_id]
+            
+            if not askYesNo('Confirm',
+                    'You are about to "freeze" current set of annotations by deleting alternatives.',
+                    detail='This operation can not be undone. \nContinue?'):
+                return
+            
+            self._input_data['contours'][self._cur_img_id] = contours.contours
+            self._set_contours(self._cur_img_id)
+            self.SaveHistory()
+        except Exception:
+            self.iter_btn.setEnabled(False)
+    #
     def _snap_annotated(self):
         if len(self._input_data['images']) == 0: return
         if self._cur_img_id == -1:
@@ -450,6 +551,7 @@ class MainWindow(QtWidgets.QMainWindow):
         err_files = []
         if len(img_filenames) is not 0:
             self._initialize_input_data()
+            self._image_view.reset_color()
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
             self._progress_dlg.setWindowTitle('Open Images')
             self._progress_dlg.show()
@@ -575,6 +677,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self._cur_img_id = newrow
         self._display_image(self._cur_img_id)
     #
+    def _set_contours(self, idx, edit_idx=None):
+        contours = self._input_data['contours'][idx]
+        if hasattr(contours, 'contours'):
+            self._image_view.set_contours(contours.contours, edit_idx)
+            self._iter_slider_status(
+                    rng=len(contours.keys())-1,
+                    pos=contours.current_index,
+                    val=contours.current_key)
+        else:
+            self._image_view.set_contours(contours, edit_idx)
+            self._iter_slider_status(None)
+    #
     def _display_image(self, idx):
         self.clear_undo()
         self._image_view.initialization()
@@ -582,20 +696,22 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self._image_view.set_image(self._input_data['images'][idx])
         self._image_view.color_info = self._input_data['colors'][idx]
-        self._image_view.set_contours(self._input_data['contours'][idx])
-        #self.contour_pts_checkbox.setChecked(True)
+        self._set_contours(idx)
         self._image_view.visibility = True
         self._sync_display_controls()
         self._image_view.reset_view(True)
 
     def _segment_cone_cells(self):
         #res = AOSettingsDialog.display_warning('Detecting cone cells', 'Do you really want to detect cells?')
+        self._segmentation_para_dlg.extended = self.extended
+        sv_state = self._segmentation_para_dlg.state
         self._segmentation_para_dlg.SetImageList(self._input_data['image names'])
         c_rows = [row for row, ann in enumerate(self._input_data['contours']) if len(ann) == 0]
         self._segmentation_para_dlg.SetCheckedRows(c_rows)
         self._segmentation_para_dlg.SetHighlightedRow(self._cur_img_id)
         res = self._segmentation_para_dlg.exec()
         if res == QtWidgets.QDialog.Rejected:
+            self._segmentation_para_dlg.state = sv_state
             return
         
         c_rows = self._segmentation_para_dlg.checkedRows()
@@ -624,30 +740,29 @@ class MainWindow(QtWidgets.QMainWindow):
         self._progress_dlg.show()
         self._progress_dlg.set_progress(0)
 
-        QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
-        for i, row in enumerate(c_rows):
-            contours = self._input_data['contours'][row]
-            img = self._input_data['images'][row]
-            
-            # res_img = self._detection.detect_cones(img)
-            # plt.imshow(res_img, cmap='gray')
-            # plt.show()
-            self._input_data['contours'][row] = self._segmentation.segment_cones(
-                    self._segmentation_models[\
-                        self._segmentation_para_dlg.segmentation_method], img,
-                    self._segmentation_para_dlg.get_image_fov(),
-                    self._segmentation_para_dlg.get_iteration_number(),
-                    self._segmentation_para_dlg.get_cell_contour_length())
-            self.SaveHistory(row)
+        fov = self._segmentation_para_dlg.image_fov
+        levelset_iterations = self._segmentation_para_dlg.levelset_iterations
+        contour_length = self._segmentation_para_dlg.contour_length
 
-            self._progress_dlg.set_progress((i+1) / float(len(c_rows))* 100)
+        try:
             QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
-
-        if not self._cur_img_id in c_rows:
-            self._file_list.setCurrentRow(c_rows[0])
-        else:
-            self._image_view.set_contours(self._input_data['contours'][self._cur_img_id])
-            self._image_view.reset_view()
+            for i, row in enumerate(c_rows):
+                # contours = self._input_data['contours'][row]
+                img = self._input_data['images'][row]
+                self._input_data['contours'][row] = self._segmentation.segment_cones(
+                    cur_segmentation_model, img, fov, levelset_iterations, contour_length)
+                self.SaveHistory(row)
+    
+                self._progress_dlg.set_progress( (i+1)*100. / float(len(c_rows)) )
+                QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+    
+            if not self._cur_img_id in c_rows:
+                self._file_list.setCurrentRow(c_rows[0])
+            else:
+                self._set_contours(self._cur_img_id)
+                self._image_view.reset_view()
+        except Exception as ex:
+            display_error('In Segment Cone Cells:', ex)
 
         self._progress_dlg.set_progress(0);
         QtWidgets.QApplication.restoreOverrideCursor()
@@ -670,9 +785,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.voronoi_act.setChecked(self._image_view.voronoi)
         self.toggle_visibility.setChecked(self._image_view.visibility)
         self._mute = False
+        self._toggle_extended()
     def _on_display_settings(self, param):
         self._image_view.displaySettings = param
         self._sync_display_controls()
+        self._image_view.reset_view(False)
     #
     def _undo(self, e):
         self._image_view.cancel_editing()
@@ -731,7 +848,7 @@ class MainWindow(QtWidgets.QMainWindow):
         c = optimizeContour(contour_pts)
         self.push_undo(UndoOp.Added, c)
         contours.append(c)
-        self._image_view.set_contours(contours)
+        self._set_contours(self._cur_img_id)
         self.SaveHistory()
     #
     def RemoveContoursInside(self, contour_pts):
@@ -750,8 +867,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 out_contours.append(c)
         QtWidgets.QApplication.restoreOverrideCursor()
         if not last:
-            self._input_data['contours'][self._cur_img_id] = out_contours
-            self._image_view.set_contours(out_contours)
+            if hasattr(in_contours, 'contours'):
+                in_contours.contours = out_contours
+                out_contours = in_contours
+            else:
+                self._input_data['contours'][self._cur_img_id] = out_contours
+            self._set_contours(self._cur_img_id)
             self.SaveHistory()
     #
     def RemoveContourAt(self, pt):
@@ -767,8 +888,12 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 out_contours.append(c)
         if not last:
-            self._input_data['contours'][self._cur_img_id] = out_contours
-            self._image_view.set_contours(out_contours)
+            if hasattr(in_contours, 'contours'):
+                in_contours.contours = out_contours
+                out_contours = in_contours
+            else:
+                self._input_data['contours'][self._cur_img_id] = out_contours
+            self._set_contours(self._cur_img_id)
             self.SaveHistory()
     #
     def EditContourAt(self, pt):
@@ -780,7 +905,7 @@ class MainWindow(QtWidgets.QMainWindow):
             idx = None
         else:
             contours[idx] = optimizeContour(contours[idx])
-        self._image_view.set_contours(contours, idx)
+        self._set_contours(self._cur_img_id, idx)
     #
     def UpdateContour(self, idx, contour_pts):
         if self._cur_img_id == -1:
@@ -843,12 +968,12 @@ class MainWindow(QtWidgets.QMainWindow):
     #
     def _reset_brightness_contrast(self):
         self._image_view.reset_color()
+        if self._cur_img_id >= 0:
+            self._input_data['colors'][self._cur_img_id] = self._image_view.color_info
         self._image_view.reset_view(True)
-    #
-    def _show_settigns_dialog(self):
-        self._settings.show()
     #
     def _show_display_settings(self, e):
         self._display_settings_dlg.displaySettings = self._image_view.displaySettings
         self._display_settings_dlg.exec_()
+        self.saveState()
     #

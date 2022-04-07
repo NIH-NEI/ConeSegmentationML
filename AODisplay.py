@@ -52,8 +52,9 @@ class AoColorButton(QtWidgets.QPushButton):
 
 class ao_display_settings(QtWidgets.QDialog):
     changed = QtCore.pyqtSignal([dict])
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, contour_settings=True):
         super(ao_display_settings, self).__init__(parent)
+        self.contour_settings = contour_settings
         self.setWindowFlags(self.windowFlags() & ~QtCore.Qt.WindowContextHelpButtonHint)
         self.setSizeGripEnabled(False)
         self.setWindowTitle('Display Settings')
@@ -65,11 +66,12 @@ class ao_display_settings(QtWidgets.QDialog):
         view_layout.setVerticalSpacing(32)
         self.setLayout(view_layout)
         #
-        contPane = QtWidgets.QGroupBox('Contour Settings')
-        view_layout.addWidget(contPane, 0, 0)
-        contLayout = QtWidgets.QGridLayout()
-        contLayout.setHorizontalSpacing(32)
-        contPane.setLayout(contLayout)
+        if self.contour_settings:
+            contPane = QtWidgets.QGroupBox('Contour Settings')
+            view_layout.addWidget(contPane, 0, 0)
+            contLayout = QtWidgets.QGridLayout()
+            contLayout.setHorizontalSpacing(32)
+            contPane.setLayout(contLayout)
         #
         glyphPane = QtWidgets.QGroupBox('Center Glyph Settings')
         view_layout.addWidget(glyphPane, 0, 1)
@@ -83,20 +85,21 @@ class ao_display_settings(QtWidgets.QDialog):
         voronoiLayout.setHorizontalSpacing(32)
         voronoiPane.setLayout(voronoiLayout)
         #
-        self.cbContVisible = QtWidgets.QCheckBox('Visible', stateChanged=lambda x: self.handleChange())
-        contLayout.addWidget(self.cbContVisible, 0, 0, 1, 3)
-        lbContWidth = QtWidgets.QLabel('Line Width:')
-        contLayout.addWidget(lbContWidth, 1, 0)
-        self.spContWidth = QtWidgets.QDoubleSpinBox(valueChanged=lambda x: self.handleChange())
-        self.spContWidth.setMinimum(0.5)
-        self.spContWidth.setSingleStep(0.5)
-        self.spContWidth.setMaximum(15.)
-        self.spContWidth.setValue(2.)
-        contLayout.addWidget(self.spContWidth, 1, 1, 1, 2)
-        lbContColor = QtWidgets.QLabel('Color:')
-        contLayout.addWidget(lbContColor, 2, 0)
-        self.btContColor = AoColorButton(onchange=lambda x: self.handleChange())
-        contLayout.addWidget(self.btContColor, 2, 2)
+        if self.contour_settings:
+            self.cbContVisible = QtWidgets.QCheckBox('Visible', stateChanged=lambda x: self.handleChange())
+            contLayout.addWidget(self.cbContVisible, 0, 0, 1, 3)
+            lbContWidth = QtWidgets.QLabel('Line Width:')
+            contLayout.addWidget(lbContWidth, 1, 0)
+            self.spContWidth = QtWidgets.QDoubleSpinBox(valueChanged=lambda x: self.handleChange())
+            self.spContWidth.setMinimum(0.5)
+            self.spContWidth.setSingleStep(0.5)
+            self.spContWidth.setMaximum(15.)
+            self.spContWidth.setValue(2.)
+            contLayout.addWidget(self.spContWidth, 1, 1, 1, 2)
+            lbContColor = QtWidgets.QLabel('Color:')
+            contLayout.addWidget(lbContColor, 2, 0)
+            self.btContColor = AoColorButton(onchange=lambda x: self.handleChange())
+            contLayout.addWidget(self.btContColor, 2, 2)
         #
         self.cbGlyphVisible = QtWidgets.QCheckBox('Visible', stateChanged=lambda x: self.handleChange())
         glyphLayout.addWidget(self.cbGlyphVisible, 0, 0, 1, 3)
@@ -156,7 +159,7 @@ class ao_display_settings(QtWidgets.QDialog):
     #
     @property
     def displaySettings(self):
-        return {
+        res = {
             'contour_visibility': self.cbContVisible.isChecked(),
             'contour_width': self.spContWidth.value(),
             'contour_color': self.btContColor.color.name(),
@@ -171,14 +174,18 @@ class ao_display_settings(QtWidgets.QDialog):
             
             'interpolation': self.cbPix.isChecked(),
         }
+        if self.contour_settings:
+            res.update({
+                'contour_visibility': self.cbContVisible.isChecked(),
+                'contour_width': self.spContWidth.value(),
+                'contour_color': self.btContColor.color.name(),
+            })
+        return res
     @displaySettings.setter
     def displaySettings(self, o):
         self._mute = True
         if isinstance(o, dict):
             try:
-                self.cbContVisible.setChecked(o['contour_visibility'])
-                self.spContWidth.setValue(o['contour_width'])
-                self.btContColor.color = o['contour_color']
                 self.cbGlyphVisible.setChecked(o['glyph_visibility'])
                 self.spGlyphWidth.setValue(o['glyph_size'])
                 self.btGlyphColor.color = o['glyph_color']
@@ -186,18 +193,23 @@ class ao_display_settings(QtWidgets.QDialog):
                 self.spVoronoiWidth.setValue(o['voronoi_width'])
                 self.btVoronoiColor.color = o['voronoi_color']
                 self.cbPix.setChecked(o['interpolation'])
+                if self.contour_settings:
+                    self.cbContVisible.setChecked(o['contour_visibility'])
+                    self.spContWidth.setValue(o['contour_width'])
+                    self.btContColor.color = o['contour_color']
             except Exception:
                 pass
         else:
-            self.cbContVisible.setChecked(True)
-            self.spContWidth.setValue(2)
-            self.btContColor.color = '#00ff00'
             self.cbGlyphVisible.setChecked(False)
-            self.spGlyphWidth.setValue(12.)
+            self.spGlyphWidth.setValue(6.)
             self.btGlyphColor.color = '#00ff00'
             self.cbVoronoiVisible.setChecked(False)
             self.spVoronoiWidth.setValue(1.5)
             self.btVoronoiColor.color = '#05c4c4'
             self.cbPix.setChecked(True)
+            if self.contour_settings:
+                self.cbContVisible.setChecked(True)
+                self.spContWidth.setValue(2)
+                self.btContColor.color = '#00ff00'
         self._mute = False
     #

@@ -297,7 +297,7 @@ class ao_visualization():
         self._contour_centers = []
         #
         self._contour_width = 2
-        self._glyph_size = 12.
+        self._glyph_size = 6.
         self._interactive_contour_width = 3
         self._edited_contour_width = 3
         self._voronoi_contour_width = 1.5
@@ -385,7 +385,7 @@ class ao_visualization():
 
         self._annotated_glyph_source = vtk.vtkGlyphSource2D()
         self._annotated_glyph_source.SetGlyphTypeToCross()
-        self._annotated_glyph_source.SetScale(self._glyph_size*0.2)
+        self._annotated_glyph_source.SetScale(self._glyph_size*0.5)
 
         self._annotated_glyph = vtk.vtkGlyph3D()
         self._annotated_glyph.SetSourceConnection(self._annotated_glyph_source.GetOutputPort())
@@ -670,7 +670,7 @@ class ao_visualization():
     @glyph_size.setter
     def glyph_size(self, sz):
         self._glyph_size = sz
-        self._annotated_glyph_source.SetScale(self._glyph_size*0.2)
+        self._annotated_glyph_source.SetScale(self._glyph_size*0.5)
     #
     @property
     def glyph_color(self):
@@ -691,8 +691,6 @@ class ao_visualization():
         self._voronoi = st
         self.updateVoronoiContours()
     #
-        # self._voronoi_contour_actor.GetProperty().SetColor(5./255.0, 196.0/255.0, 196.0/255.0)
-        # self._voronoi_contour_actor.GetProperty().SetLineWidth(self._voronoi_contour_width)
     @property
     def voronoi_width(self):
         return self._voronoi_contour_width
@@ -734,8 +732,7 @@ class ao_visualization():
         try:
             for a, v in o.items():
                 setattr(self, a, v)
-        except Exception as ex:
-            print(ex)
+        except Exception:
             pass
     #
     @property
