@@ -1,5 +1,5 @@
 
-!define VERSION "1.0.8"
+!define VERSION "1.0.9"
 !define PATCH  "1"
 !define INST_DIR "dist\ConeSegmentationML"
 
@@ -11,8 +11,8 @@ Var START_MENU
 InstallDir $PROGRAMFILES64\ConeSegmentationML
  
 ;define installer name
-Name "Cone Segmentation (ML) 1.0.8"
-OutFile "dist\ConeSegmentationML-1.0.8-win64.exe"
+Name "Cone Segmentation (ML) 1.0.9"
+OutFile "dist\ConeSegmentationML-1.0.9-win64.exe"
 
 ;SetCompressor lzma
 
@@ -66,7 +66,7 @@ Push "DisplayName"
 Push "Cone Segmentation (ML)"
 Call ConditionalAddToRegisty
 Push "DisplayVersion"
-Push "1.0.8"
+Push "1.0.9"
 Call ConditionalAddToRegisty
 Push "Publisher"
 Push "National Eye Institute"

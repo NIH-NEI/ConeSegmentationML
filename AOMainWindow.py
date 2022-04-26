@@ -204,7 +204,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._file_list = QtWidgets.QListWidget(self)
         self._file_list.currentRowChanged.connect(self._file_list_row_changed)
 
-        vtkWidget = QVTKRenderWindowInteractor(frame)
+        self.vtkFrame = vtkWidget = QVTKRenderWindowInteractor(frame)
         self._image_view = AOImageView.ao_visualization(vtkWidget, parent=self)
 
         flist_layout = Qt.QVBoxLayout()
@@ -344,6 +344,12 @@ class MainWindow(QtWidgets.QMainWindow):
                     triggered=self._snap_annotated)
         view_menu.addAction(self.snap_annotated_act)
 
+        self.screen_act = QtWidgets.QAction('Screenshot', self, shortcut='Ctrl+F7',
+                    statusTip='Copy screenshot to clipboard (Ctrl+F7)',
+                    toolTip='Copy screenshot to clipboard (Ctrl+F7)',
+                    triggered=self._screen)
+        view_menu.addAction(self.screen_act)
+
         self.about_act = QtWidgets.QAction('About', self,
                     icon=qt_icon('about'),
                     triggered=self._display_about)
@@ -362,6 +368,19 @@ class MainWindow(QtWidgets.QMainWindow):
                     shortcut='Down', triggered=self.next_image)
         self._prev_image_act = QtWidgets.QAction('PreviousImage', self,
                     shortcut='Up', triggered=self.previous_image)
+    #
+    def _screen(self):
+        #pixmap = self.vtkFrame.grab()
+        orig = self.vtkFrame.mapToGlobal(QtCore.QPoint(0,0))
+        sz = self.vtkFrame.size()
+        rect = QtCore.QRect(orig, sz)
+        pixmap = QtWidgets.QApplication.primaryScreen().grabWindow(0)
+        pixmap = pixmap.copy(rect)
+        #
+        clip = QtWidgets.QApplication.clipboard()
+        clip.setPixmap(pixmap)
+        self._status_bar.showMessage('Viewport copied to clipboard.')
+        #pixmap.save('screenshot.png')
     #
     def _update_listwidget(self, image_paths, newlist=True):
         if len(image_paths) != self._file_list.count():
@@ -513,7 +532,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if len(self._input_data['images']) == 0: return
         if self._cur_img_id == -1:
             return
-        dlg = ao_snap_dialog(parent=self)
+        dlg = ao_snap_dialog(parent=self, glyph_scale=0.5)
         dlg.setWindowTitle(self._input_data['image names'][self._cur_img_id]+' - Snapshot')
         dlg.setWindowIcon(qt_icon('ConeSegmentationML.png'))
         dlg.setImageData(
@@ -846,6 +865,8 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         contours = self._input_data['contours'][self._cur_img_id]
         c = optimizeContour(contour_pts)
+        if len(c) < 3:
+            return
         self.push_undo(UndoOp.Added, c)
         contours.append(c)
         self._set_contours(self._cur_img_id)

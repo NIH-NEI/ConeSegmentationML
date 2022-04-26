@@ -480,13 +480,15 @@ class ao_visualization():
     #
     def _change_camera_orientation(self):
         self._render.ResetCamera()
-        fp = self._render.GetActiveCamera().GetFocalPoint()
-        p = self._render.GetActiveCamera().GetPosition()
+        camera = self._render.GetActiveCamera()
+        fp = camera.GetFocalPoint()
+        p = camera.GetPosition()
         dist = (fp[0]-p[0])*(fp[0]-p[0])+(fp[1]-p[1])*(fp[1]-p[1])+(fp[2]-p[2])*(fp[2]-p[2])
         dist = math.sqrt(dist)
-        self._render.GetActiveCamera().SetPosition(fp[0], fp[1], fp[2]-dist)
-        self._render.GetActiveCamera().SetViewUp(0.0, -1.0, 0.0)
-        self._render.GetActiveCamera().SetParallelProjection(True)
+        camera.SetPosition(fp[0], fp[1], fp[2]-dist)
+        camera.SetViewUp(0.0, -1.0, 0.0)
+        camera.SetParallelProjection(True)
+        #camera.SetParallelScale(camera.GetParallelScale() * 0.66667)
 
     def reset_view(self, camera_flag=False):
         if camera_flag:

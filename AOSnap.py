@@ -15,8 +15,9 @@ from AOUtil import SegmentClipper, contourCenter
 class ao_snap_dialog(QtWidgets.QDialog):
     IMG_SCALES = [50, 100, 200, 300, 500, 1000, 1500, 2000]
     save_state = None
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, glyph_scale=1.):
         super(ao_snap_dialog, self).__init__(parent)
+        self.glyph_scale = glyph_scale
         self.setWindowFlags(self.windowFlags() & ~QtCore.Qt.WindowContextHelpButtonHint)
         self.setSizeGripEnabled(True)
         #
@@ -24,6 +25,10 @@ class ao_snap_dialog(QtWidgets.QDialog):
         self.qImg = self.emptyImage()
         self.pixmap = None
         self.img_path = None
+        self.img_origin = None
+        self.img_spacing = None
+        self._preview_scale = 0
+        #
         self._mute = True
         #
         self.contours = []
@@ -56,12 +61,19 @@ class ao_snap_dialog(QtWidgets.QDialog):
         self.img_lab = QtWidgets.QLabel()
         self.img_lab.setBackgroundRole(QtGui.QPalette.Base)
         self.img_lab.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
-        imgLayout.addWidget(self.img_lab, 0, 0)
+        self.scrl = QtWidgets.QScrollArea()
+        self.scrl.setBackgroundRole(QtGui.QPalette.Dark)
+        self.scrl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+        self.scrl.setWidget(self.img_lab)
+        imgLayout.addWidget(self.scrl, 0, 0)
         #
         sizePane = QtWidgets.QGroupBox('Output Image Options')
         sizeLayout = QtWidgets.QGridLayout()
         sizePane.setLayout(sizeLayout)
         ctl_layout.addWidget(sizePane, 0, 0)
+        sizeLayout.setColumnStretch(0, 0)
+        sizeLayout.setColumnStretch(1, 1)
+        sizeLayout.setColumnStretch(2, 0)
         #
         scaleLab = QtWidgets.QLabel('Scale (%):')
         sizeLayout.addWidget(scaleLab, 0, 0)
@@ -70,33 +82,41 @@ class ao_snap_dialog(QtWidgets.QDialog):
         self.comboScale.setEditable(True)
         self.comboScale.addItems([str(sc) for sc in self.IMG_SCALES])
         self.comboScale.setCurrentText('200')
-        sizeLayout.addWidget(self.comboScale, 0, 1)
+        sizeLayout.addWidget(self.comboScale, 0, 1, 1, 2)
         #
         widthLab = QtWidgets.QLabel('Width (pix):')
         sizeLayout.addWidget(widthLab, 1, 0)
         self.txWidth = QtWidgets.QLineEdit()
         self.txWidth.setStyleSheet('QLineEdit {width: 10en;}')
-        sizeLayout.addWidget(self.txWidth, 1, 1)
+        sizeLayout.addWidget(self.txWidth, 1, 1, 1, 2)
         #
         heightLab = QtWidgets.QLabel('Height (pix):')
         sizeLayout.addWidget(heightLab, 2, 0)
         self.txHeight = QtWidgets.QLineEdit()
         self.txHeight.setStyleSheet('QLineEdit {width: 10en;}')
-        sizeLayout.addWidget(self.txHeight, 2, 1)
+        sizeLayout.addWidget(self.txHeight, 2, 1, 1, 2)
         #
-        srcLayout = QtWidgets.QGridLayout()
-        srcLayout.setColumnStretch(0, 1)
-        srcLayout.setColumnStretch(1, 0)
-        ctl_layout.addLayout(srcLayout, 1, 0)
         self.cbBkg = QtWidgets.QCheckBox('Source image', stateChanged=self.onBkgImage)
         self.cbBkg.setChecked(True)
-        srcLayout.addWidget(self.cbBkg, 0, 0, 1, 2)
+        sizeLayout.addWidget(self.cbBkg, 3, 0, 1, 3)
         
         lbBkgColor = QtWidgets.QLabel('Background:')
-        srcLayout.addWidget(lbBkgColor, 1, 0)
+        sizeLayout.addWidget(lbBkgColor, 4, 0)
         self.btBkgColor = AoColorButton(onchange=self.onBkgColor)
         self.btBkgColor.color = '#000000'
-        srcLayout.addWidget(self.btBkgColor, 1, 1)
+        sizeLayout.addWidget(self.btBkgColor, 4, 2)
+        #
+        poptPane = QtWidgets.QGroupBox('Preview Options')
+        ctl_layout.addWidget(poptPane, 1, 0, 1, 2)
+        poptLayout = QtWidgets.QGridLayout()
+        poptPane.setLayout(poptLayout)
+        self.rbFit = QtWidgets.QRadioButton('Fit')
+        poptLayout.addWidget(self.rbFit, 0, 0)
+        self.rbOne = QtWidgets.QRadioButton('x1')
+        poptLayout.addWidget(self.rbOne, 0, 1)
+        self.rbTwo = QtWidgets.QRadioButton('x2')
+        poptLayout.addWidget(self.rbTwo, 0, 2)
+        self.rbFit.setChecked(True)
         #
         spaceLab = QtWidgets.QLabel(' ')
         ctl_layout.addWidget(spaceLab, 2, 0)
@@ -118,6 +138,9 @@ class ao_snap_dialog(QtWidgets.QDialog):
         self.txWidth.textChanged.connect(self._onTxWidth)
         self.txHeight.textChanged.connect(self._onTxHeight)
         #
+        self.rbFit.toggled.connect(self._on_preview_scale)
+        self.rbOne.toggled.connect(self._on_preview_scale)
+        self.rbTwo.toggled.connect(self._on_preview_scale)
         self.btnDisp.clicked.connect(self._onBtnDsp)
         self.btnSave.clicked.connect(self._onBtnSave)
         self.btnClose.clicked.connect(self.close)
@@ -140,6 +163,7 @@ class ao_snap_dialog(QtWidgets.QDialog):
             'out_scale': self.out_scale,
             'image_visible': self.image_visible,
             'bkg_color': self.bkg_color,
+            'preview_scale': self.preview_scale,
         }
     @p_state.setter
     def p_state(self, st):
@@ -148,6 +172,7 @@ class ao_snap_dialog(QtWidgets.QDialog):
             self.out_scale = st['out_scale']
             self.image_visible = st['image_visible']
             self.bkg_color = st['bkg_color']
+            self.preview_scale = st['preview_scale']
         except Exception:
             geom = QtWidgets.QApplication.primaryScreen().geometry()
             self.resize(geom.width() * 45 // 100, geom.height() * 60 // 100)
@@ -179,6 +204,34 @@ class ao_snap_dialog(QtWidgets.QDialog):
         rgb_data = np.empty(shape=(16, 16, 3), dtype=np.uint8)
         rgb_data[:,:,:] = 0x80
         self.qImg = QtGui.QImage(rgb_data.data, 16, 16, 16*3, QtGui.QImage.Format_RGB888)
+        self.img_origin = None
+        self.img_spacing = None
+    #
+    def _on_preview_scale(self):
+        if self._mute:
+            return
+        sc = 0
+        if self.rbOne.isChecked():
+            sc = 1
+        elif self.rbTwo.isChecked():
+            sc = 2
+        if sc != self._preview_scale:
+            self._preview_scale = sc
+            self.resizeEvent(None)
+    #
+    @property
+    def preview_scale(self):
+        return self._preview_scale
+    @preview_scale.setter
+    def preview_scale(self, v):
+        if not v in (1, 2): v = 0
+        self._preview_scale = v
+        if v == 2:
+            self.rbTwo.setChecked(True)
+        elif v == 1:
+            self.rbOne.setChecked(True)
+        else:
+            self.rbFit.setChecked(True)
     #
     def _sync_output_size(self):
         if not self.isVisible(): return
@@ -327,7 +380,11 @@ class ao_snap_dialog(QtWidgets.QDialog):
         if not img_path:
             self.qImg = self.emptyImage()
             return
+        self.img_origin = None
+        self.img_spacing = None
         if isinstance(img_data, sitk.SimpleITK.Image):
+            self.img_origin = img_data.GetOrigin()
+            self.img_spacing = img_data.GetSpacing()
             img_data = sitk.GetArrayFromImage(img_data)
         elif not isinstance(img_data, np.ndarray):
             img_data = None
@@ -424,7 +481,8 @@ class ao_snap_dialog(QtWidgets.QDialog):
             (1, 1), (1, 5), (-1, 5),
             (-1, 1), (-5, 1), (-5, -1), ]
     def _scaled_glyph_poly(self, sc):
-        sc = sc * self.glyph_size * 0.15
+        sp = 1. if not self.img_spacing else self.glyph_scale/self.img_spacing[0]
+        sc = sc * self.glyph_size * 0.1*sp
         return QtGui.QPolygon([QtCore.QPoint(x*sc, y*sc) for x, y in self.GLYPH_COORD])
     #
     def resizeEvent(self, e):
@@ -432,11 +490,15 @@ class ao_snap_dialog(QtWidgets.QDialog):
             return
         if not self.isVisible():
             return
-        qsz = self.img_lab.size()
-        scx = qsz.width() / self.qImg.width()
-        sc = qsz.height() / self.qImg.height()
-        if scx < sc:
-            sc = scx
+        sc = self.preview_scale
+        if sc == 0:
+            qsz = self.scrl.size()
+            scx = (qsz.width() - 2) / self.qImg.width()
+            sc = (qsz.height() - 2) / self.qImg.height()
+            if scx < sc:
+                sc = scx
+        elif not e is None:
+            return
         self.renderImage(sc)
     #
     def generateScaledPixmap(self, sc):
@@ -487,7 +549,17 @@ class ao_snap_dialog(QtWidgets.QDialog):
             sc = self.out_scale
         self.pixmap = self.generateScaledPixmap(sc)
         self.img_lab.setPixmap(self.pixmap)
+        self.img_lab.resize(self.pixmap.width(), self.pixmap.height())
         self.update()
+        self.centerImage()
+    #
+    def centerImage(self):
+        wsz = self.scrl.widget().size()
+        vsz = self.scrl.viewport().size()
+        if wsz.width() >= vsz.width():
+            self.scrl.horizontalScrollBar().setValue((wsz.width() - vsz.width()) // 2)
+        if wsz.height() >= vsz.height():
+            self.scrl.verticalScrollBar().setValue((wsz.height() - vsz.height()) // 2)
     #
     def _onBtnSave(self):
         if not self.img_path:

@@ -1,3 +1,9 @@
+#### Version 1.0.9 (2022-04-26) ####
+- Fixed issue with wrong glyph scaling in the "Snapshot" feature
+- Increased upper limit for glyph size to 250 in "Display Settings".
+- Added preview options 1x and 2x (on top of Fit-To-Frame) in "Snapshot".
+- Ctrl+F7 copies image widget from the main screen to clipboard.
+
 #### Version 1.0.8 (2022-04-07) ####
 
 - Experimental option of multiple values for "Levelset iterations" is merged into the main version.
