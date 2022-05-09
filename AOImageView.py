@@ -306,8 +306,10 @@ class ao_visualization():
         self._draw_interactive_contours()
         self._draw_edited_contours()
         self._draw_voronoi_contours()
+        self._draw_background_region()
         #
         self._render = vtk.vtkRenderer()
+        self._render.AddActor(self._bkg_actor)
         self._render.AddActor(self._image_actor)
         self._render.AddActor(self._contour_actor)
         self._render.AddActor(self._annotated_actor)
@@ -337,6 +339,7 @@ class ao_visualization():
         self._glyph_visibility = False
         self._interpolation = True
         self._voronoi = False
+        self._image_visibility = True
     #
     def _on_edited_contour(self, obj, event):
         # print('_on_edited_contour:', obj, '->', event)
@@ -454,6 +457,23 @@ class ao_visualization():
         self._voronoi_contour_actor.GetProperty().SetColor(5./255.0, 196.0/255.0, 196.0/255.0)
         self._voronoi_contour_actor.GetProperty().SetLineWidth(self._voronoi_contour_width)
     #
+    def _draw_background_region(self):
+        self._bkg_points = vtk.vtkPoints()
+        self._bkg_points.SetDataTypeToFloat()
+        self._bkg_cells = vtk.vtkCellArray()
+        self._bkg_poly = vtk.vtkPolyData()
+        self._bkg_poly.SetPoints(self._bkg_points)
+        self._bkg_poly.SetPolys(self._bkg_cells)
+        self._bkg_tri_filter = vtk.vtkTriangleFilter()
+        self._bkg_tri_filter.SetInputData(self._bkg_poly)
+        self._bkg_mapper = vtk.vtkPolyDataMapper()
+        self._bkg_mapper.SetInputConnection(self._bkg_tri_filter.GetOutputPort())
+        self._bkg_mapper.ScalarVisibilityOff()
+        self._bkg_actor = vtk.vtkActor()
+        self._bkg_actor.SetMapper(self._bkg_mapper)
+        self._bkg_actor.GetProperty().SetColor(0., 0., 0.)
+        self._bkg_actor.SetVisibility(False)
+    #
     def initialization(self):
         self._image_data.Initialize()
         self._image_data.Modified()
@@ -477,6 +497,10 @@ class ao_visualization():
         self._voronoi_contour_points.Initialize()
         self._voronoi_contour_lines.Initialize()
         self._voronoi_contour_poly.Modified()
+        
+        self._bkg_points.Initialize()
+        self._bkg_cells.Initialize()
+        self._bkg_poly.Modified()
     #
     def _change_camera_orientation(self):
         self._render.ResetCamera()
@@ -511,6 +535,28 @@ class ao_visualization():
         self._image_data.Initialize()
         self._convert_nparray_to_vtk_image(itk_img, self._image_data)
         self._image_data.Modified()
+        #
+        img_origin = self._image_data.GetOrigin()
+        img_spacing = self._image_data.GetSpacing()
+        img_dim = self._image_data.GetDimensions()
+        x0 = img_origin[0]
+        x1 = img_origin[0] + (img_dim[0] - 0.999) * img_spacing[0]
+        y0 = img_origin[1]
+        y1 = img_origin[1] + (img_dim[1] - 0.999) * img_spacing[1]
+        self._bkg_points.Initialize()
+        self._bkg_cells.Initialize()
+        self._bkg_cells.InsertNextCell(4)
+        self._bkg_points.InsertNextPoint(x0, y0, -0.0001)
+        self._bkg_cells.InsertCellPoint(0)
+        self._bkg_points.InsertNextPoint(x1, y0, -0.0001)
+        self._bkg_cells.InsertCellPoint(1)
+        self._bkg_points.InsertNextPoint(x1, y1, -0.0001)
+        self._bkg_cells.InsertCellPoint(2)
+        self._bkg_points.InsertNextPoint(x0, y1, -0.0001)
+        self._bkg_cells.InsertCellPoint(3)
+        self._bkg_points.Modified()
+        self._bkg_cells.Modified()
+        self._bkg_poly.Modified()
 
     def set_contours(self, contour_pts, edit_idx=None):
         if not self.edit_idx is None:
@@ -723,9 +769,29 @@ class ao_visualization():
         else:
             self._image_actor.InterpolateOff()
     #
+    @property
+    def image_visibility(self):
+        return self._image_actor.GetVisibility()
+    @image_visibility.setter
+    def image_visibility(self, st):
+        self._image_actor.SetVisibility(st)
+        self._bkg_actor.SetVisibility(not st)
+    #
+    @property
+    def background_color(self):
+        r, g, b = self._bkg_actor.GetProperty().GetColor()
+        c = QtGui.QColor(int(r*255.), int(g*255.), int(b*255.))
+        return c.name()
+    @background_color.setter
+    def background_color(self, v):
+        c = QtGui.QColor(v)
+        if c.isValid():
+            self._bkg_actor.GetProperty().SetColor(c.red()/255., c.green()/255., c.blue()/255.)
+    #
     DISPLAY_ATTRIBUTES = ('contour_visibility', 'contour_width', 'contour_color',
             'glyph_visibility', 'glyph_size', 'glyph_color',
-            'voronoi', 'voronoi_width', 'voronoi_color', 'interpolation',)
+            'voronoi', 'voronoi_width', 'voronoi_color',
+            'interpolation', 'image_visibility', 'background_color',)
     @property
     def displaySettings(self):
         return dict([(a, getattr(self,a)) for a in self.DISPLAY_ATTRIBUTES])

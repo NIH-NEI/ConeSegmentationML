@@ -16,7 +16,7 @@
 		doi={10.1109/TMI.2021.3055483}
 	}
 	
-<img src="assets/main_ui.png" width="563" height="360" />
+<img src="assets/main_ui.png" width="611" height="360" />
 <img src="assets/editing.png" width="491" height="360" />
 
 ---------------

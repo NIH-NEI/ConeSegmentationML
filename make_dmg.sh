@@ -10,5 +10,5 @@ osascript MacOS/DMGSetup.scpt ConeSegmentationML
 hdiutil detach /Volumes/ConeSegmentationML
 python MacOS/licenseDMG.py ConeSegmentationML-Darwin0.dmg Help/License.txt
 rm ConeSegmentationML-Darwin.dmg
-hdiutil convert ConeSegmentationML-Darwin0.dmg -format UDZO -o dist/ConeSegmentationML-1.0.9-Darwin.dmg
+hdiutil convert ConeSegmentationML-Darwin0.dmg -format UDZO -o dist/ConeSegmentationML-1.1.0-Darwin.dmg
 rm ConeSegmentationML-Darwin0.dmg

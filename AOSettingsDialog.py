@@ -12,9 +12,12 @@ from PyQt5 import QtCore, QtWidgets, QtGui
 if hasattr(sys, '_MEIPASS'):
     BASE_DIR = sys._MEIPASS
 else:
-    BASE_DIR = os.path.dirname(__file__)
+    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 ICONS_DIR = os.path.join(BASE_DIR, 'Icons')
 HELP_DIR = os.path.join(BASE_DIR, 'Help')
+
+MODEL_WEIGHTS_DIR = os.path.join(BASE_DIR, 'model_weights')
+MODEL_WEIGHTS_SUBDIR = 'A-GANs'
 
 def qt_icon(name):
     return QtGui.QIcon(os.path.join(ICONS_DIR, name))
@@ -430,6 +433,12 @@ If a cell contour length is less than this value, then the result is discarded.'
     TIP_FIELD_OF_VIEW = u"""Field of view: Field of view that the image was acquired with (typically 0.5 to 3.0 deg.)
 For example, a 1.0 means that an image was acquired with a 1.0 deg. field of view with 750x605 pixels.
 This parameter should be scaled if the pixel sampling differs."""
+    TIP_MODEL_WEIGHTS = u'''Machine Learning Model Weights: the default is "Built-in pre-trained", which points to pre-trained
+model weights supplied with the distribution.
+If you have custom trained models, make sure they are stored in files ending with '_centroids.h5',
+'_contours.h5' and '_regions.h5', place them in the same directory, switch to "Custom" and
+select one of these files when prompted.'''
+    #
     def __init__(self, parent=None):
         super(ao_parameter_dialog, self).__init__(parent)
         self.setWindowFlags(self.windowFlags() & ~QtCore.Qt.WindowContextHelpButtonHint)
@@ -437,13 +446,10 @@ This parameter should be scaled if the pixel sampling differs."""
         self.save_geom = None
         #
         geom = QtWidgets.QApplication.primaryScreen().geometry()
-        #self.setMinimumSize(geom.width()*32/100, geom.height()*40/100)
-        self.resize(geom.width()*32/100, geom.height()*40/100)
+        self.resize(geom.width()*36/100, geom.height()*44/100)
         #
         self._extended = True
-        #
-        self._segmentation_weights = {}
-        self._segmentation_method = '-- No method --'
+        self._mute = False
         #
         self.normal = QtGui.QFont(self.font())
         self.bold = QtGui.QFont(self.normal)
@@ -460,17 +466,6 @@ This parameter should be scaled if the pixel sampling differs."""
         if not self.save_geom is None:
             self.setGeometry(self.save_geom)
     #
-    @property
-    def segmentation_method(self):
-        return self._segmentation_method
-    @segmentation_method.setter
-    def segmentation_method(self, v):
-        if not v in self._segmentation_weights:
-            return
-        self._segmentation_method = v
-        if hasattr(self, '_segmentation_method_box'):
-            self._segmentation_method_box.setText(v)
-    #
     @staticmethod
     def _create_spin_box(v, r=(1, 10000), s=1):
         res = QtWidgets.QSpinBox()
@@ -484,13 +479,21 @@ This parameter should be scaled if the pixel sampling differs."""
         
         qmark = QtGui.QPixmap(os.path.join(ICONS_DIR, 'help_small.png'));
         
-#         segmentation_method_label = QtWidgets.QLabel('Segmentation method:')
-#         #self._segmentation_method_box = QtWidgets.QComboBox()
-#         #self._detection_method_box.currentIndexChanged.connect(self._select_detection_method)
-#         self._segmentation_method_box = QtWidgets.QLineEdit(self._segmentation_method)
-#         self._segmentation_method_box.setReadOnly(True)
-#         self._segmentation_method_box.setStyleSheet(
-#             "QLineEdit {background: rgb(220, 220, 220); selection-background-color: rgb(128, 160, 255);}")
+        ml_panel = QtWidgets.QGroupBox('Machine Learning Model Weights')
+        ml_layout = QtWidgets.QGridLayout()
+        ml_panel.setLayout(ml_layout)
+        self.rb_builtin = QtWidgets.QRadioButton('Built-in pre-trained')
+        ml_layout.addWidget(self.rb_builtin, 0, 0)
+        ml_q = TipLabel(qmark, self.TIP_MODEL_WEIGHTS)
+        ml_layout.addWidget(ml_q, 0, 1)
+        self.rb_custom = QtWidgets.QRadioButton('Custom')
+        ml_layout.addWidget(self.rb_custom, 1, 0)
+        self.txCustomDir = QtWidgets.QLineEdit()
+        self.txCustomDir.setReadOnly(True)
+        ml_layout.addWidget(self.txCustomDir, 1, 1)
+        self.btnBrowse = QtWidgets.QPushButton('Browse')
+        ml_layout.addWidget(self.btnBrowse, 1, 2)
+        self.rb_builtin.setChecked(True)
 
         # Mainstream version controls
         iteration_label_n = QtWidgets.QLabel('Level-set iterations:')
@@ -577,8 +580,7 @@ This parameter should be scaled if the pixel sampling differs."""
         view_layout.setColumnStretch(3, 10)
         view_layout.addWidget(self.imageTable, 0, 0, 1, 4)
         
-#         view_layout.addWidget(segmentation_method_label, 1, 0)
-#         view_layout.addWidget(self._segmentation_method_box, 1, 1, 1, 3)
+        view_layout.addWidget(ml_panel, 1, 0, 1, 4)
         
         view_layout.addWidget(iteration_label_n, 2, 0)
         view_layout.addWidget(self._iteration_input_n, 2, 1)
@@ -606,11 +608,14 @@ This parameter should be scaled if the pixel sampling differs."""
         view_layout.addWidget(self.buttonbox, 7, 0, 1, 4)
         self.setLayout(view_layout)
         #
+        self.btnBrowse.clicked.connect(self._on_browse_custom)
+        self.rb_custom.toggled.connect(self._handle_custom_rb)
         self.rb_single.toggled.connect(self._handle_iter_rb)
         self.rb_range.toggled.connect(self._handle_iter_rb)
         self._handle_iter_rb(True)
     #
     def restoreDefaults(self):
+        self.rb_builtin.setChecked(True)
         self.rb_single.setChecked(True)
         self._iteration_input_x.setValue(200)
         self._start_input.setValue(50)
@@ -660,13 +665,109 @@ This parameter should be scaled if the pixel sampling differs."""
         if len(self.checkedRows()) > 0:
             QtWidgets.QDialog.accept(self)
     #
-    def set_segmentation_weights(self, weights):
-        self._segmentation_weights = weights or {}
-        if not self.segmentation_method in self._segmentation_weights:
-            for method in sorted(weights.keys()):
-                self.segmentation_method = method
-                break
-                # self._segmentation_method_box.addItem(method)
+    def _handle_custom_rb(self, st):
+        if self._mute: return
+        if self.custom:
+            mw = self.scan_model_dir(self.custom_directory)
+            if not mw:
+                self._browse_custom()
+    #
+    @staticmethod
+    def scan_model_dir(mdir):
+        if not mdir:
+            return None
+        mdir = os.path.abspath(mdir)
+        res = {}
+        for fn in os.listdir(mdir):
+            fpath = os.path.join(mdir, fn)
+            if not os.path.isfile(fpath): continue
+            bn, ext = os.path.splitext(fn.lower())
+            if ext != '.h5': continue
+            parts = bn.split('_')
+            for key in ('contours', 'regions', 'centroids'):
+                if key in parts:
+                    res[key] = fpath
+                    break
+        return res if len(res) == 3 else None
+    #
+    def _on_browse_custom(self):
+        self._mute = True
+        self.custom = True
+        self._mute = False
+        self._browse_custom()
+    #
+    def _validate_custom(self):
+        if self.custom and not self.custom_directory:
+            self._mute = True
+            self.custom = False
+            self._mute = False
+    #
+    def _browse_custom(self):
+        cdir = self.custom_directory if self.custom_directory else QtCore.QDir.home()
+        file_dialog = QtWidgets.QFileDialog(self)
+        file_dialog.setNameFilters(["Trained ML model weights (*contours.h5 *regions.h5 *centroids.h5)"])
+        file_dialog.selectNameFilter('')
+        file_dialog.setWindowTitle('Browse Trained ML Model Weights')
+        file_dialog.setFileMode(QtWidgets.QFileDialog.ExistingFile)
+        file_dialog.setLabelText(QtWidgets.QFileDialog.Accept, 'Select')
+        file_dialog.setDirectory(cdir)
+        rc = file_dialog.exec_()
+        if not rc:
+            self._validate_custom()
+            return
+        flist = file_dialog.selectedFiles()
+        if len(flist) < 1:
+            self._validate_custom()
+            return
+        mdir = os.path.dirname(flist[0])
+        if not self.scan_model_dir(mdir) is None:
+            self.custom_directory = mdir
+        elif self.custom:
+            #QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+            display_error('Missing Model Weights',
+                "Please place '<>_centroids.h5', '<>_contours.h5' and '<>_regions.h5' "+
+                "in a directory, then select one of these files.")
+            self._validate_custom()
+    #
+    @property
+    def custom(self):
+        return self.rb_custom.isChecked()
+    @custom.setter
+    def custom(self, st):
+        self.rb_builtin.setChecked(not st)
+        self.rb_custom.setChecked(st)
+    #
+    @property
+    def custom_directory(self):
+        return self.txCustomDir.text()
+    @custom_directory.setter
+    def custom_directory(self, v):
+        self.txCustomDir.setText(v)
+        self.txCustomDir.setToolTip(v)
+    #
+    def default_model_weights(self):
+        cdir = MODEL_WEIGHTS_DIR
+        wmap = {}
+        mw = self.scan_model_dir(cdir)
+        if mw:
+            wmap['.'] = mw
+        for fn in os.listdir(cdir):
+            dpath = os.path.join(cdir, fn)
+            if not os.path.isdir(dpath): continue
+            mw = self.scan_model_dir(dpath)
+            if mw:
+                wmap[fn] = mw
+        if MODEL_WEIGHTS_SUBDIR in wmap:
+            return wmap[MODEL_WEIGHTS_SUBDIR]
+        for k, v in wmap.items():
+            return v
+        return None
+    #
+    @property
+    def model_weights(self):
+        if self.custom:
+            return self.scan_model_dir(self.custom_directory)
+        return self.default_model_weights()
     #
     @property
     def extended(self):
@@ -738,16 +839,20 @@ This parameter should be scaled if the pixel sampling differs."""
             return self.iteration_number
         return self.iteration_range
     #
-    STATE_ATTRIBUTES = ('segmentation_method', 'iteration_number', 'contour_length', 'image_fov',
+    STATE_ATTRIBUTES = ('custom', 'custom_directory', 'iteration_number', 'contour_length', 'image_fov',
             'iteration_single', 'iteration_range',)
     @property
     def state(self):
         return dict([(a, getattr(self,a)) for a in self.STATE_ATTRIBUTES])
     @state.setter
     def state(self, jobj):
+        self._mute = True
         for a in self.STATE_ATTRIBUTES:
             if a in jobj:
                 setattr(self, a, jobj[a])
+        if self.custom and self.model_weights is None:
+            self.custom = False
+        self._mute = False
 #
 
 

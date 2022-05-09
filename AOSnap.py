@@ -96,25 +96,15 @@ class ao_snap_dialog(QtWidgets.QDialog):
         self.txHeight.setStyleSheet('QLineEdit {width: 10en;}')
         sizeLayout.addWidget(self.txHeight, 2, 1, 1, 2)
         #
-        self.cbBkg = QtWidgets.QCheckBox('Source image', stateChanged=self.onBkgImage)
-        self.cbBkg.setChecked(True)
-        sizeLayout.addWidget(self.cbBkg, 3, 0, 1, 3)
-        
-        lbBkgColor = QtWidgets.QLabel('Background:')
-        sizeLayout.addWidget(lbBkgColor, 4, 0)
-        self.btBkgColor = AoColorButton(onchange=self.onBkgColor)
-        self.btBkgColor.color = '#000000'
-        sizeLayout.addWidget(self.btBkgColor, 4, 2)
-        #
         poptPane = QtWidgets.QGroupBox('Preview Options')
         ctl_layout.addWidget(poptPane, 1, 0, 1, 2)
         poptLayout = QtWidgets.QGridLayout()
         poptPane.setLayout(poptLayout)
         self.rbFit = QtWidgets.QRadioButton('Fit')
         poptLayout.addWidget(self.rbFit, 0, 0)
-        self.rbOne = QtWidgets.QRadioButton('x1')
+        self.rbOne = QtWidgets.QRadioButton('100%')
         poptLayout.addWidget(self.rbOne, 0, 1)
-        self.rbTwo = QtWidgets.QRadioButton('x2')
+        self.rbTwo = QtWidgets.QRadioButton('200%')
         poptLayout.addWidget(self.rbTwo, 0, 2)
         self.rbFit.setChecked(True)
         #
@@ -161,8 +151,6 @@ class ao_snap_dialog(QtWidgets.QDialog):
         return {
             'geometry': self.geometry(),
             'out_scale': self.out_scale,
-            'image_visible': self.image_visible,
-            'bkg_color': self.bkg_color,
             'preview_scale': self.preview_scale,
         }
     @p_state.setter
@@ -170,35 +158,11 @@ class ao_snap_dialog(QtWidgets.QDialog):
         try:
             self.setGeometry(st['geometry'])
             self.out_scale = st['out_scale']
-            self.image_visible = st['image_visible']
-            self.bkg_color = st['bkg_color']
             self.preview_scale = st['preview_scale']
         except Exception:
             geom = QtWidgets.QApplication.primaryScreen().geometry()
             self.resize(geom.width() * 45 // 100, geom.height() * 60 // 100)
             self.move(geom.width() * 18 // 100, geom.height() * 18 // 100)
-    #
-    @property
-    def image_visible(self):
-        return self.cbBkg.isChecked()
-    @image_visible.setter
-    def image_visible(self, st):
-        return self.cbBkg.setChecked(st)
-    #
-    @property
-    def bkg_color(self):
-        return self.btBkgColor.color
-    @bkg_color.setter
-    def bkg_color(self, v):
-        self.btBkgColor.color = v
-    #
-    def onBkgImage(self):
-        if self._mute: return
-        self.resizeEvent(None)
-    def onBkgColor(self, v):
-        if self._mute: return
-        if not self.image_visible:
-            self.resizeEvent(None)
     #
     def emptyImage(self):
         rgb_data = np.empty(shape=(16, 16, 3), dtype=np.uint8)
@@ -218,6 +182,8 @@ class ao_snap_dialog(QtWidgets.QDialog):
         if sc != self._preview_scale:
             self._preview_scale = sc
             self.resizeEvent(None)
+            if (sc):
+                self.centerImage()
     #
     @property
     def preview_scale(self):
@@ -341,11 +307,19 @@ class ao_snap_dialog(QtWidgets.QDialog):
             'voronoi_color': '#05c4c4',
             
             'interpolation': True,
+            'image_visibility': True,
+            'background_color': '#000000',
         }
     #
     @property
     def interpolation(self):
         return self._dsp['interpolation']
+    @property
+    def image_visibility(self):
+        return self._dsp['image_visibility']
+    @property
+    def background_color(self):
+        return self._dsp['background_color']
     @property
     def contour_visibility(self):
         return self._dsp['contour_visibility']
@@ -376,7 +350,9 @@ class ao_snap_dialog(QtWidgets.QDialog):
     #
     def setImageData(self, img_path, img_data=None, displaySettings=None, colorInfo=None):
         self.img_path = img_path
-        self._dsp = displaySettings or self._defaultDisplaySettings()
+        self._dsp = self._defaultDisplaySettings()
+        if displaySettings:
+            self._dsp.update(displaySettings)
         if not img_path:
             self.qImg = self.emptyImage()
             return
@@ -504,14 +480,15 @@ class ao_snap_dialog(QtWidgets.QDialog):
     def generateScaledPixmap(self, sc):
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
         
-        if self.image_visible:
+        if self.image_visibility:
             scImg = self.qImg.scaled(int(self.qImg.width()*sc), int(self.qImg.height()*sc),
                     transformMode=QtCore.Qt.SmoothTransformation if self.interpolation else QtCore.Qt.FastTransformation)
             pixmap = QtGui.QPixmap.fromImage(scImg)
             del scImg
         else:
             pixmap = QtGui.QPixmap(int(self.qImg.width()*sc), int(self.qImg.height()*sc))
-            pixmap.fill(self.bkg_color)
+            color = QtGui.QColor(self.background_color)
+            pixmap.fill(color)
 
         # Draw annotations
         painter = QtGui.QPainter(pixmap)
@@ -551,7 +528,6 @@ class ao_snap_dialog(QtWidgets.QDialog):
         self.img_lab.setPixmap(self.pixmap)
         self.img_lab.resize(self.pixmap.width(), self.pixmap.height())
         self.update()
-        self.centerImage()
     #
     def centerImage(self):
         wsz = self.scrl.widget().size()
@@ -591,7 +567,7 @@ class ao_snap_dialog(QtWidgets.QDialog):
         try:
             pixmap = self.generateScaledPixmap(self.out_scale)
             pixmap.save(pkl_filenames[0], 'PNG')
-        except Exception as ex:
-            print(ex)
+        except Exception:
+            pass
         QtWidgets.QApplication.restoreOverrideCursor()
 

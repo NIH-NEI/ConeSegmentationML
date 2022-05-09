@@ -21,8 +21,6 @@ import datetime
 import AOGenetic
 import multiprocessing
 
-from AOUtil import datadir, timing
-
 import multiprocessing as mp
 core_num = mp.cpu_count()
 config = tf.ConfigProto(
@@ -128,37 +126,7 @@ class ao_method():
         model.summary()
         return model
 
-    @datadir
-    def create_segmentation_models(self, model_weight_dir):
-        abs_mwd = os.path.abspath(model_weight_dir)
-        # extract a list of model weights to create detection models
-        all_model_dirs = [f for f in os.listdir(model_weight_dir) if not f.startswith('.')]
-        model_dictionary = {}
-        if len(all_model_dirs) == 0:
-            return model_dictionary #return an empty dictionary, no detection model available
-
-        for model_dir in all_model_dirs:
-            model_files = [f for f in os.listdir(os.path.join(model_weight_dir, model_dir))
-                           if not f.startswith('.') and f.endswith('.h5')]
-            
-            if len(model_files) != 3:
-                continue
-
-            tmp_directory = {'contours': None, 'regions': None, 'centroids': None}
-            for model_file in model_files:
-                if 'contours' in model_file:
-                    tmp_directory['contours'] = os.path.join(abs_mwd, model_dir, model_file)
-                elif 'regions' in model_file:
-                    tmp_directory['regions'] = os.path.join(abs_mwd, model_dir, model_file)
-                elif 'centroids' in model_file:
-                    tmp_directory['centroids'] = os.path.join(abs_mwd, model_dir, model_file)
-
-            model_dictionary[model_dir] = tmp_directory
-
-        return model_dictionary
-
     def create_segmentation_model(self, model_weights):
-
 
         self._model_weights = model_weights
 
@@ -405,7 +373,6 @@ class ao_method():
         cell_radius = [stats.GetEquivalentEllipsoidDiameter(l)[1]/2 for l in stats.GetLabels() if l!=0]
         return {'centroid': cell_centroids, 'radius': cell_radius, 'labels': cell_labels}
     
-    @timing
     def _build_connection_graph(self, ws, cell_info):
         # Derived from C++ code with a few Python-esque optimizations
         ymax = ws.GetHeight() - 1

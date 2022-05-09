@@ -114,8 +114,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._progress_dlg.setMinimumWidth(geom.width()/5)
         self._file_io = AOFileIO.ao_fileIO()
         self._segmentation = AOMethod.ao_method()
-        self._segmentation_models = self._segmentation.create_segmentation_models('model_weights')
-        self._segmentation_para_dlg.set_segmentation_weights(self._segmentation_models)
+        #self._segmentation_models = self._segmentation.create_segmentation_models('model_weights')
+        #self._segmentation_para_dlg.set_segmentation_weights(self._segmentation_models)
         #
         self._data_loc_dlg = ao_loc_dialog(self)
         self._data_loc_dlg.setMinimumWidth(geom.width()/2)
@@ -370,7 +370,6 @@ class MainWindow(QtWidgets.QMainWindow):
                     shortcut='Up', triggered=self.previous_image)
     #
     def _screen(self):
-        #pixmap = self.vtkFrame.grab()
         orig = self.vtkFrame.mapToGlobal(QtCore.QPoint(0,0))
         sz = self.vtkFrame.size()
         rect = QtCore.QRect(orig, sz)
@@ -380,7 +379,6 @@ class MainWindow(QtWidgets.QMainWindow):
         clip = QtWidgets.QApplication.clipboard()
         clip.setPixmap(pixmap)
         self._status_bar.showMessage('Viewport copied to clipboard.')
-        #pixmap.save('screenshot.png')
     #
     def _update_listwidget(self, image_paths, newlist=True):
         if len(image_paths) != self._file_list.count():
@@ -619,6 +617,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
 
             self._update_listwidget(self._input_data['image file paths'], newlist=True)
+            self._image_view.image_visibility = True
             self._display_image(0)
             self._cur_img_id = 0
             self._file_list.setCurrentRow(self._cur_img_id)
@@ -739,20 +738,19 @@ class MainWindow(QtWidgets.QMainWindow):
             display_error('Input error:', 'Nothing was checked.')
             return
 
-        cur_segmentation_model = self._segmentation_models[self._segmentation_para_dlg.segmentation_method]
-        if cur_segmentation_model['contours'] == None or cur_segmentation_model['regions'] == None\
-                or cur_segmentation_model['centroids'] == None or len(self._input_data['images']) == 0:
-            display_error('Input errors:', 'There are either no segmentation models or input data!')
+        cur_segmentation_model = self._segmentation_para_dlg.model_weights
+        if not cur_segmentation_model:
+            display_error('Input errors:', 'Missing Segmentation Model Weights!')
             return
+        for fpath in cur_segmentation_model.values():
+            mdir = os.path.dirname(fpath)
+            self._status_bar.showMessage('Using Segmentation Model Weights from: '+mdir)
+            break
 
         self._image_view.cancel_editing()
         self.clear_undo()
-        #self.contour_pts_checkbox.setChecked(True)
         self._image_view.visibility = True
         self._sync_display_controls()
-
-#         window_title = cfg.APP_NAME + ': ' + self._segmentation_para_dlg.segmentation_method
-#         self.setWindowTitle(window_title)
 
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
         self._progress_dlg.setWindowTitle('Segment cones ...')
@@ -765,6 +763,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         try:
             QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+            
             for i, row in enumerate(c_rows):
                 # contours = self._input_data['contours'][row]
                 img = self._input_data['images'][row]
@@ -992,6 +991,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._cur_img_id >= 0:
             self._input_data['colors'][self._cur_img_id] = self._image_view.color_info
         self._image_view.reset_view(True)
+        self._image_view.image_visibility = True
     #
     def _show_display_settings(self, e):
         self._display_settings_dlg.displaySettings = self._image_view.displaySettings
