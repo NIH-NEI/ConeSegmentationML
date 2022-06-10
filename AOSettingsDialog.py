@@ -17,7 +17,6 @@ ICONS_DIR = os.path.join(BASE_DIR, 'Icons')
 HELP_DIR = os.path.join(BASE_DIR, 'Help')
 
 MODEL_WEIGHTS_DIR = os.path.join(BASE_DIR, 'model_weights')
-MODEL_WEIGHTS_SUBDIR = 'A-GANs'
 
 def qt_icon(name):
     return QtGui.QIcon(os.path.join(ICONS_DIR, name))
@@ -446,7 +445,7 @@ select one of these files when prompted.'''
         self.save_geom = None
         #
         geom = QtWidgets.QApplication.primaryScreen().geometry()
-        self.resize(geom.width()*36/100, geom.height()*44/100)
+        self.resize(geom.width()*36/100, geom.height()*60/100)
         #
         self._extended = True
         self._mute = False
@@ -482,10 +481,15 @@ select one of these files when prompted.'''
         ml_panel = QtWidgets.QGroupBox('Machine Learning Model Weights')
         ml_layout = QtWidgets.QGridLayout()
         ml_panel.setLayout(ml_layout)
+
         self.rb_builtin = QtWidgets.QRadioButton('Built-in pre-trained')
         ml_layout.addWidget(self.rb_builtin, 0, 0)
+        
+        self.cb_builtin = QtWidgets.QComboBox()
+        ml_layout.addWidget(self.cb_builtin, 0, 1)
+        
         ml_q = TipLabel(qmark, self.TIP_MODEL_WEIGHTS)
-        ml_layout.addWidget(ml_q, 0, 1)
+        ml_layout.addWidget(ml_q, 0, 2)
         self.rb_custom = QtWidgets.QRadioButton('Custom')
         ml_layout.addWidget(self.rb_custom, 1, 0)
         self.txCustomDir = QtWidgets.QLineEdit()
@@ -494,6 +498,10 @@ select one of these files when prompted.'''
         self.btnBrowse = QtWidgets.QPushButton('Browse')
         ml_layout.addWidget(self.btnBrowse, 1, 2)
         self.rb_builtin.setChecked(True)
+        
+        self.lb_ml = QtWidgets.QLabel('\n\n')
+        self.lb_ml.setStyleSheet('QLabel {color: #333366}')
+        ml_layout.addWidget(self.lb_ml, 2, 1, 1, 2)
 
         # Mainstream version controls
         iteration_label_n = QtWidgets.QLabel('Level-set iterations:')
@@ -608,11 +616,15 @@ select one of these files when prompted.'''
         view_layout.addWidget(self.buttonbox, 7, 0, 1, 4)
         self.setLayout(view_layout)
         #
+        self.update_builtin_weights()
+        #
         self.btnBrowse.clicked.connect(self._on_browse_custom)
         self.rb_custom.toggled.connect(self._handle_custom_rb)
         self.rb_single.toggled.connect(self._handle_iter_rb)
         self.rb_range.toggled.connect(self._handle_iter_rb)
+        self.cb_builtin.currentTextChanged.connect(self._update_weights_label)
         self._handle_iter_rb(True)
+        self._update_weights_label()
     #
     def restoreDefaults(self):
         self.rb_builtin.setChecked(True)
@@ -665,8 +677,32 @@ select one of these files when prompted.'''
         if len(self.checkedRows()) > 0:
             QtWidgets.QDialog.accept(self)
     #
+    def update_builtin_weights(self):
+        save_name = self.builtin_directory
+        self._update_builtin_weights()
+        if save_name:
+            self.builtin_directory = save_name
+    #
+    def _update_builtin_weights(self):
+        cdir = MODEL_WEIGHTS_DIR
+        self.cb_builtin.clear()
+        for mdir in os.listdir(cdir):
+            fpath = os.path.join(cdir, mdir)
+            if not os.path.isdir(fpath): continue
+            if not self.scan_model_dir(fpath) is None:
+                self.cb_builtin.addItem(mdir)
+    #
+    def _update_weights_label(self):
+        res = self.model_weights
+        if res:
+            txt = '\n'.join([os.path.basename(x) for x in sorted(res.values())])
+        else:
+            txt = ' '
+        self.lb_ml.setText(txt)
+    #
     def _handle_custom_rb(self, st):
         if self._mute: return
+        self._update_weights_label()
         if self.custom:
             mw = self.scan_model_dir(self.custom_directory)
             if not mw:
@@ -722,6 +758,7 @@ select one of these files when prompted.'''
         mdir = os.path.dirname(flist[0])
         if not self.scan_model_dir(mdir) is None:
             self.custom_directory = mdir
+            self._update_weights_label()
         elif self.custom:
             #QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
             display_error('Missing Model Weights',
@@ -736,6 +773,15 @@ select one of these files when prompted.'''
     def custom(self, st):
         self.rb_builtin.setChecked(not st)
         self.rb_custom.setChecked(st)
+    #
+    @property
+    def builtin_directory(self):
+        return self.cb_builtin.currentText()
+    @builtin_directory.setter
+    def builtin_directory(self, v):
+        fpath = os.path.join(MODEL_WEIGHTS_DIR, v)
+        if not self.scan_model_dir(fpath) is None:
+            self.cb_builtin.setCurrentText(v)
     #
     @property
     def custom_directory(self):
@@ -757,8 +803,8 @@ select one of these files when prompted.'''
             mw = self.scan_model_dir(dpath)
             if mw:
                 wmap[fn] = mw
-        if MODEL_WEIGHTS_SUBDIR in wmap:
-            return wmap[MODEL_WEIGHTS_SUBDIR]
+        if self.builtin_directory in wmap:
+            return wmap[self.builtin_directory]
         for k, v in wmap.items():
             return v
         return None
@@ -839,8 +885,8 @@ select one of these files when prompted.'''
             return self.iteration_number
         return self.iteration_range
     #
-    STATE_ATTRIBUTES = ('custom', 'custom_directory', 'iteration_number', 'contour_length', 'image_fov',
-            'iteration_single', 'iteration_range',)
+    STATE_ATTRIBUTES = ('custom', 'custom_directory', 'builtin_directory',
+            'iteration_number', 'contour_length', 'image_fov', 'iteration_single', 'iteration_range',)
     @property
     def state(self):
         return dict([(a, getattr(self,a)) for a in self.STATE_ATTRIBUTES])

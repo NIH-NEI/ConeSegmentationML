@@ -1,3 +1,4 @@
+VERSION="1.1.1"
 rm -rf build/
 rm -rf dist/
 pyinstaller --clean --noconfirm build-app-dir.spec
@@ -8,7 +9,7 @@ mkdir /Volumes/ConeSegmentationML/.background
 cp MacOS/DMGbackground.tif /Volumes/ConeSegmentationML/.background/background.tif
 osascript MacOS/DMGSetup.scpt ConeSegmentationML
 hdiutil detach /Volumes/ConeSegmentationML
-python MacOS/licenseDMG.py ConeSegmentationML-Darwin0.dmg Help/License.txt
-rm ConeSegmentationML-Darwin.dmg
-hdiutil convert ConeSegmentationML-Darwin0.dmg -format UDZO -o dist/ConeSegmentationML-1.1.0-Darwin.dmg
+#python MacOS/licenseDMG.py ConeSegmentationML-Darwin0.dmg Help/License.txt
+hdiutil convert ConeSegmentationML-Darwin0.dmg -format UDZO -o "dist/ConeSegmentationML-${VERSION}-Darwin.dmg"
 rm ConeSegmentationML-Darwin0.dmg
+dmg-license MacOS/dmg-license-spec.json "dist/ConeSegmentationML-${VERSION}-Darwin.dmg"

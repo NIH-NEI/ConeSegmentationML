@@ -1,9 +1,12 @@
+#### Version 1.1.1 (2022-06-03) ####
+- Added selector for built-in models and a box displaying files in use to the "Segmentation Settings" box.
+
 #### Version 1.1.0 (2022-05-06) ####
 - Controls for toggling source image on/off and changing background color are moved to the "Display Settings" box.
   They now work for the main screen as well, not only for the Snapshot feature.
 - Snapshot preview image scale labels: "1x" -> "100%", "2x" -> "200%".
-- The "Custom" option added to the "segmentation Settings" box. It allows users to specify custom trained set of ML
-  Model Weights for segmentation.
+- The "Custom" option added to the "Segmentation Settings" box. It allows users to specify custom trained set of ML
+  Model Werights for segmentation.
 - No preview image scroll/centering on display settings changes in "Snapshot". 
 
 #### Version 1.0.9 (2022-04-26) ####
