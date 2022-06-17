@@ -1,3 +1,7 @@
+#### Version 1.1.1 (2022-06-17) ####
+- Fixed bug with not displaying model weights files after cancel browsing in the "Segmentation Settings" box.
+- Added label "Currently Loaded:" before the model weights file names.
+
 #### Version 1.1.1 (2022-06-03) ####
 - Added selector for built-in models and a box displaying files in use to the "Segmentation Settings" box.
 

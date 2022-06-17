@@ -499,6 +499,9 @@ select one of these files when prompted.'''
         ml_layout.addWidget(self.btnBrowse, 1, 2)
         self.rb_builtin.setChecked(True)
         
+        lb_ml_cur = QtWidgets.QLabel('Currently loaded:')
+        lb_ml_cur.setAlignment(QtCore.Qt.AlignTop)
+        ml_layout.addWidget(lb_ml_cur, 2, 0)
         self.lb_ml = QtWidgets.QLabel('\n\n')
         self.lb_ml.setStyleSheet('QLabel {color: #333366}')
         ml_layout.addWidget(self.lb_ml, 2, 1, 1, 2)
@@ -702,11 +705,11 @@ select one of these files when prompted.'''
     #
     def _handle_custom_rb(self, st):
         if self._mute: return
-        self._update_weights_label()
         if self.custom:
             mw = self.scan_model_dir(self.custom_directory)
             if not mw:
                 self._browse_custom()
+        self._update_weights_label()
     #
     @staticmethod
     def scan_model_dir(mdir):
@@ -737,6 +740,7 @@ select one of these files when prompted.'''
             self._mute = True
             self.custom = False
             self._mute = False
+        self._update_weights_label()
     #
     def _browse_custom(self):
         cdir = self.custom_directory if self.custom_directory else QtCore.QDir.home()
@@ -758,7 +762,6 @@ select one of these files when prompted.'''
         mdir = os.path.dirname(flist[0])
         if not self.scan_model_dir(mdir) is None:
             self.custom_directory = mdir
-            self._update_weights_label()
         elif self.custom:
             #QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
             display_error('Missing Model Weights',
