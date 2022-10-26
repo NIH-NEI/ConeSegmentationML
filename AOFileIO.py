@@ -8,12 +8,14 @@ import numpy as np
 import imageio
 import SimpleITK as sitk
 
-def write_points(file_name, pts, img_origin, img_spacing):
-    with open(file_name, 'w') as annotation_file:
-        annotation_writer = csv.writer(annotation_file, delimiter=',')
-        for pt in pts:
-            annotation_writer.writerow([(pt[0] - img_origin[0]) / img_spacing[0],
-                                        (pt[1] - img_origin[1]) / img_spacing[1]])
+from AOMetaList import *
+
+# def write_points(file_name, pts, img_origin, img_spacing):
+#     with open(file_name, 'w') as annotation_file:
+#         annotation_writer = csv.writer(annotation_file, delimiter=',')
+#         for pt in pts:
+#             annotation_writer.writerow([(pt[0] - img_origin[0]) / img_spacing[0],
+#                                         (pt[1] - img_origin[1]) / img_spacing[1]])
 
 class ao_fileIO():
     def __init__(self):
@@ -30,10 +32,20 @@ class ao_fileIO():
 
     def read_contours(self, file_name, ignore_errors=True):
         try:
-            contours = []
+            contours = MetaList(meta=MetaMap(MetaRecord(user='=Diskfile=')))
             wrong = 0
             with open(file_name, 'rt') as fi:
                 for _line in fi:
+                    if _line.startswith('#meta'):
+                        try:
+                            rdr = csv.reader(io.StringIO(_line))
+                            for ln in rdr:
+                                kwarg = json.loads(ln[1])
+                                break
+                            contours.meta.addmeta(MetaRecord(**kwarg), setdefault=True)
+                        except Exception:
+                            pass
+                        continue
                     line = _line.strip()
                     if len(line) == 0 or line.startswith('#'): continue
                     parts = line.replace('[', '').replace(']', '').replace('"', '').split(',')
@@ -44,41 +56,50 @@ class ao_fileIO():
                         wrong += 1
             if len(contours) == 0 and wrong > 0:
                 raise RuntimeError('Wrong CSV format')  
-            return contours
         except Exception as ex:
-            pass
-        try:
-            # Old ConeSegmentation had a bug in generated *_contours.csv,
-            # let's try *.json instead
-            fdir, fn = os.path.split(file_name)
-            jpath = os.path.join(fdir, fn.split('_contours.csv')[0]+'.json')
-            with open(jpath, 'r') as fi:
-                data = json.load(fi)
-                contours = [marker['contours'] for marker in data['markers']]
-                return contours
-        except Exception:
-            pass    
-        if ignore_errors:
-            return []
-        raise ex
-
+            contours = None
+        if contours is None:
+            try:
+                # Old ConeSegmentation had a bug in generated *_contours.csv,
+                # let's try *.json instead
+                fdir, fn = os.path.split(file_name)
+                jpath = os.path.join(fdir, fn.split('_contours.csv')[0]+'.json')
+                with open(jpath, 'r') as fi:
+                    data = json.load(fi)
+                    contours = MetaList([marker['contours'] for marker in data['markers']])
+                    return contours
+            except Exception:
+                #pass    
+                if ignore_errors:
+                    contours = MetaList([])
+                else:
+                    raise ex
+        contours.meta.addmeta(MetaRecord(), setdefault=True)
+        return contours
+    #
     def _write_contour_to_fileobj(self, contour_file, contours, img_origin, img_spacing):
         contour_writer = csv.writer(contour_file, delimiter=',')
-
+        #
+        def flatten_contours(contour_pts):
+            contour = []
+            for pt in contour_pts:
+                contour.append(f'{pt[0]:.3f}')
+                contour.append(f'{pt[1]:.3f}')
+            return contour
+        #
+        if hasattr(contours, 'itermapping'):
+            for meta, contour_list in contours.itermapping():
+                mstr = json.dumps(meta.as_jsonable())
+                contour_writer.writerow(['#meta', mstr])
+                for contour_pts in contour_list:
+                    contour = flatten_contours(contour_pts)
+                    contour_writer.writerow(contour)
+            return
+        #
         for contour_pts in contours:
             if len(contour_pts) == 0:
                 continue
-            contour = []
-            for pt in contour_pts:
-                contour.extend(pt)
-
-            # contour_pts = []
-            # for pt in contour:
-            #     pt[0] = (pt[0]-img_origin[0])/img_spacing[0]
-            #     pt[1] = (pt[1]-img_origin[1])/img_spacing[1]
-            #     contour_pts.append(pt[0])
-            #     contour_pts.append(pt[1])
-            # contour_writer.writerow(contour_pts)
+            contour = flatten_contours(contour_pts)
             contour_writer.writerow(contour)
     #
     def write_contour(self, file_name, contours, img_origin, img_spacing):
@@ -102,6 +123,3 @@ class ao_fileIO():
             self.write_contour(contour_path, contours, img.GetOrigin(), img.GetSpacing())
             cnt += 1
         return cnt
-
-
-

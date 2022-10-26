@@ -16,6 +16,7 @@ import AOImageView
 from AOImageView import MouseOp
 import AOFileIO
 import AOMethod
+from AOMetaList import *
 from AOSettingsDialog import *
 from AODisplay import ao_display_settings
 from AOSnap import ao_snap_dialog
@@ -106,6 +107,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._status_bar.setStyleSheet("QStatusBar{border-top: 1px outset grey;}")
         self.setStatusBar(self._status_bar)
 
+        self._status_id = -1
+        self.mposText = QtWidgets.QLabel()
+        #self.mposText.setReadOnly(True)
+        self.mposText.setMaximumWidth(geom.width()*25//100)
+        self._status_bar.addPermanentWidget(self.mposText, 0)
+
         self._segmentation_para_dlg = ao_parameter_dialog(self)
         self._segmentation_para_dlg.setMinimumSize(geom.width()*24//100, geom.height()//4)
         self._display_settings_dlg = ao_display_settings(self)
@@ -120,10 +127,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self._data_loc_dlg = ao_loc_dialog(self)
         self._data_loc_dlg.setMinimumWidth(geom.width()/2)
         #
-        self._status_bar.showMessage('Press F1 for help.')
+        self.status('Press F1 for help.')
         self.loadState()
         self.setAcceptDrops(True)
         self._mute = False
+    #
+    def status(self, msg, temp=False):
+        if temp:
+            self.mposText.setText(msg)
+        else:
+            self._status_bar.showMessage(msg)
     #
     def loadState(self):
         try:
@@ -329,13 +342,21 @@ class MainWindow(QtWidgets.QMainWindow):
                     statusTip='Show data locations of the current image file',
                     triggered=self._show_data_locations)
 
+        self.disp_act = QtWidgets.QAction('Display Settings...', iconText='Settings', shortcut='F5',
+                icon=qt_icon('settings'), toolTip='Change Display Settings (F5)',
+                triggered=self._show_display_settings)
+        
+        self.meta_act = QtWidgets.QAction('Annotation Sources...', shortcut='F6',
+                toolTip='Highlight select annotation sources (F6)',
+                triggered=self._select_annotation_sources)
+
         view_menu = self.menuBar().addMenu("&View")
         view_menu.addAction(self.toggle_visibility)
         view_menu.addAction(self.voronoi_act)
         view_menu.addAction(self.toggle_interpolation)
         view_menu.addSeparator()
-        view_menu.addAction(self.reset_brightness_contrast)
-        view_menu.addAction(self.data_loc_act)
+        view_menu.addAction(self.disp_act)
+        view_menu.addAction(self.meta_act)
         view_menu.addSeparator()
         self.snap_annotated_act = QtWidgets.QAction('Snapshot...', self, shortcut='F7',
                     icon=qt_icon('camera'),
@@ -349,6 +370,10 @@ class MainWindow(QtWidgets.QMainWindow):
                     toolTip='Copy screenshot to clipboard (Ctrl+F7)',
                     triggered=self._screen)
         view_menu.addAction(self.screen_act)
+
+        view_menu.addSeparator()
+        view_menu.addAction(self.data_loc_act)
+        view_menu.addAction(self.reset_brightness_contrast)
 
         self.about_act = QtWidgets.QAction('About', self,
                     icon=qt_icon('about'),
@@ -378,7 +403,7 @@ class MainWindow(QtWidgets.QMainWindow):
         #
         clip = QtWidgets.QApplication.clipboard()
         clip.setPixmap(pixmap)
-        self._status_bar.showMessage('Viewport copied to clipboard.')
+        self.status('Viewport copied to clipboard.')
     #
     def _update_listwidget(self, image_paths, newlist=True):
         if len(image_paths) != self._file_list.count():
@@ -437,9 +462,6 @@ class MainWindow(QtWidgets.QMainWindow):
         settings_bar.addSeparator()
         #
         settings_bar.addAction(self.toggle_visibility)
-        self.disp_act = QtWidgets.QAction('Settings', shortcut='F5',
-                icon=qt_icon('settings'), toolTip='Change Display Settings (F5)',
-                triggered=self._show_display_settings)
         settings_bar.addAction(self.disp_act)
         settings_bar.addAction(self.snap_annotated_act)
         settings_bar.addSeparator()
@@ -539,7 +561,10 @@ class MainWindow(QtWidgets.QMainWindow):
             displaySettings=self._image_view.displaySettings,
             colorInfo=self._image_view.color_info,
         )
-        dlg.setContours(self._input_data['contours'][self._cur_img_id])
+        contours = self._input_data['contours'][self._cur_img_id]
+        if hasattr(contours, 'contours'):
+            contours = contours.contours
+        dlg.setContours(contours)
         dlg.exec_()
     #
     def _open_images(self):
@@ -588,7 +613,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 history_file_name = self.hist.get_history_file(img_name)
                 local_file_name = self.hist.get_local_file(img_name)
 
-                contour_pts = []
+                contour_pts = MetaList()
                 
                 if not no_ann:
                     if not ann_filenames is None:
@@ -631,7 +656,7 @@ class MainWindow(QtWidgets.QMainWindow):
             elif save_state:
                 self.saveDir = self.loadDir = QtCore.QDir(img_dir)
                 self.saveState()
-            self._status_bar.showMessage(img_dir)
+            self.status(img_dir)
         if len(err_files) > 0:
             if len(err_files) > 5:
                 err_files = err_files[:4] + ['... +%d more.' % (len(err_files)-4,)]
@@ -744,7 +769,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         for fpath in cur_segmentation_model.values():
             mdir = os.path.dirname(fpath)
-            self._status_bar.showMessage('Using Segmentation Model Weights from: '+mdir)
+            self.status('Using Segmentation Model Weights from: '+mdir)
             break
 
         self._image_view.cancel_editing()
@@ -795,6 +820,8 @@ class MainWindow(QtWidgets.QMainWindow):
         history_file_name = self.hist.get_history_file(self._input_data['image file paths'][i])
         contours = self._input_data['contours'][i]
         img = self._input_data['images'][i]
+        if hasattr(contours, 'contours'):
+            contours = contours.contours
         self._file_io.write_contour(history_file_name, contours, img.GetOrigin(), img.GetSpacing())
     #
     def _sync_display_controls(self):
@@ -888,8 +915,9 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QApplication.restoreOverrideCursor()
         if not last:
             if hasattr(in_contours, 'contours'):
-                in_contours.contours = out_contours
-                out_contours = in_contours
+                in_contours = in_contours.contours
+            if hasattr(in_contours, 'update'):
+                in_contours.update(out_contours)
             else:
                 self._input_data['contours'][self._cur_img_id] = out_contours
             self._set_contours(self._cur_img_id)
@@ -909,8 +937,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 out_contours.append(c)
         if not last:
             if hasattr(in_contours, 'contours'):
-                in_contours.contours = out_contours
-                out_contours = in_contours
+                in_contours = in_contours.contours
+            if hasattr(in_contours, 'update'):
+                in_contours.update(out_contours)
             else:
                 self._input_data['contours'][self._cur_img_id] = out_contours
             self._set_contours(self._cur_img_id)
@@ -920,21 +949,29 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._cur_img_id == -1:
             return
         contours = self._input_data['contours'][self._cur_img_id]
+        if hasattr(contours, 'contours'):
+            contours = contours.contours
         self._edited_contour_idx = idx = findContour(pt, contours)
         if idx < 0:
             idx = None
         else:
             contours[idx] = optimizeContour(contours[idx])
+            if hasattr(contours, 'meta'):
+                contours.meta.addobj(contours[idx], contours.meta.default)
         self._set_contours(self._cur_img_id, idx)
     #
     def UpdateContour(self, idx, contour_pts):
         if self._cur_img_id == -1:
             return
         contours = self._input_data['contours'][self._cur_img_id]
+        if hasattr(contours, 'contours'):
+            contours = contours.contours
         if contourChanged(contours[idx], contour_pts):
             self.push_undo(UndoOp.Added, contour_pts)
             self.push_undo(UndoOp.Removed, contours[idx], False)
             contours[idx] = contour_pts
+            if hasattr(contours, 'meta'):
+                contours.meta.addobj(contours[idx], contours.meta.default)
             self.SaveHistory()
     #
     def _save_data(self):
@@ -948,7 +985,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     'Select saving directory', sdir)
             if dir_name:
                 cnt = self._file_io.write_contours(dir_name, self._input_data, suffix=self.hist.suffix)
-                self._status_bar.showMessage('%d contour file(s) saved to %s' % (cnt, dir_name))
+                self.status('%d contour file(s) saved to %s' % (cnt, dir_name))
                 self._update_listwidget(self._input_data['image file paths'], newlist=False)
                 self.saveDir = QtCore.QDir(dir_name)
                 self.saveState()
@@ -968,14 +1005,14 @@ class MainWindow(QtWidgets.QMainWindow):
         #self.contour_pts_checkbox.setChecked(True)
         self._image_view.visibility = True
         self._sync_display_controls()
-        self._input_data['contours'][id] = []
+        self._input_data['contours'][id] = MetaList()
         self._image_view.set_contours(self._input_data['contours'][id])
         self._image_view.reset_view(False)
         self.SaveHistory()
 
     def _quit(self, event):
         self.close()
-
+        
     def _toggle_visibility(self):
         if not self._mute:
             self._image_view.visibility = self.toggle_visibility.isChecked()
@@ -987,6 +1024,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.saveState()
     #
     def _reset_brightness_contrast(self):
+        self.resetSources()
         self._image_view.reset_color()
         if self._cur_img_id >= 0:
             self._input_data['colors'][self._cur_img_id] = self._image_view.color_info
@@ -997,4 +1035,94 @@ class MainWindow(QtWidgets.QMainWindow):
         self._display_settings_dlg.displaySettings = self._image_view.displaySettings
         self._display_settings_dlg.exec_()
         self.saveState()
+    #
+    def trackMousePos(self, x, y):
+        msg = ''
+        try:
+            contours = self._input_data['contours'][self._cur_img_id]
+            if hasattr(contours, 'contours'):
+                contours = contours.contours
+            idx = findContour((x, y, 0), contours)
+            meta = contours.objmeta(contours[idx])
+            if meta:
+                meta = str(meta)
+            else:
+                meta = ''
+        except Exception:
+            idx = -1
+            meta = ''
+        if self._status_id != idx:
+            self._status_id = idx
+            if idx >= 0:
+                x, y = contourCenter(contours[idx])
+                msg = f'({x:.0f},{y:.0f}): {meta}'
+            self.status(msg, temp=True)
+    #
+    def _update_sources(self):
+        self._set_contours(self._cur_img_id)
+        self._image_view.reset_view()
+    #
+    def resetSources(self, update=False):
+        id = self._cur_img_id
+        if id < 0: return
+        contours = self._input_data['contours'][id]
+        if hasattr(contours, 'contours'):
+            contours = contours.contours
+        if hasattr(contours, 'setGrayMeta'):
+            contours.setGrayMeta([])
+        self._set_contours(self._cur_img_id)
+        if update:
+            self._image_view.reset_view()
+    #
+    def _update_user_comment(self, comment, comment_default):
+        try:
+            assert self._cur_img_id >= 0
+            contours = self._input_data['contours'][self._cur_img_id]
+            if hasattr(contours, 'contours'):
+                _contours = contours.contours
+            else:
+                _contours = [contours]
+            for contours in _contours:
+                mrec = contours.meta.default
+                if comment:
+                    mrec.__dict__['comment'] = comment
+                else:
+                    if 'comment' in mrec.__dict__:
+                        del mrec.comment
+        except Exception:
+            pass
+        #
+        if comment_default:
+            MetaRecord.COMMENT = comment
+            if MetaRecord.COMMENT:
+                for contours in self._input_data['contours']:
+                    if hasattr(contours, 'contours'):
+                        _contours = contours.contours
+                    else:
+                        _contours = [contours]
+                for contours in _contours:
+                    try:
+                        mrec = contours.meta.default
+                        if not hasattr(mrec, 'comment'):
+                            mrec.__dict__['comment'] = MetaRecord.COMMENT
+                    except Exception:
+                        pass
+    #   
+    def _select_annotation_sources(self, e):
+        id = self._cur_img_id
+        if id < 0: return
+        contours = self._input_data['contours'][id]
+        if hasattr(contours, 'contours'):
+            contours = contours.contours
+        if len(contours) == 0: return
+        self._image_view.visibility = True
+        self._sync_display_controls()
+        self._image_view.reset_view()
+        dlg = ao_source_dialog(self, callback=self._update_sources)
+        dlg.setMetaList(contours)
+        rc = dlg.exec_()
+        if not rc:
+            self.resetSources(update=True)
+        else:
+            self._update_user_comment(dlg.comment, dlg.comment_default)
     #

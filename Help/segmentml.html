@@ -120,6 +120,26 @@ If a cell contour length is less than this value, then the result is discarded.
                 pixel interpolation for scaling. Any changes take effect immediately.</td>
             </tr>
             <tr>
+                <td><b>F6</b></td>
+                <td><div>Annotation Sources...</td>
+                <td>Open a dialog listing annotation sources (or origins). Starting with ver. 1.2 each annotation
+                is assigned a metadata object describing the source or origin of the annotation. For example,
+                annotations generated automatically will have name of the algorithm/method, creation date and
+                method parameter values, e.g. &ldquo;(156,269) A-GANs - 2022-10-25 FOV=0.75 LSI=100 MinLen=20&rdquo;.
+                Annotations created or edited manually will have the name of the system user and the current date.
+                When you mouse over an annotation, its center point coordinates and source are displayed
+                in the status line at the bottom right corner of the main application window.</div>
+                <div>The dialog allows you to change display for select annotation sources: annotations, associated
+                with unchecked sources, will be displayed in dark dull color, and their central points will
+                not be displayed at all. The list of sources in the dialog is sorted by the date in reverse
+                order, most recent source(s) on top.</div>
+                <div>In addition, you may specify an optional comment, which will be assigned to all your
+                edits on the current image. If you check the &ldquo;Set as default&rdquo; box, the same comment
+                will be also applied to all open images (during the current session), that have no comment
+                on your edits yet.</div></td>
+            </tr>
+            
+            <tr>
                 <td><b>F7</b></td>
                 <td><img src="../Icons/camera.png" width=32 height=32 />&nbsp;Snapshot...</td>
                 <td>Open a preview dialog displaying current image with annotations.
@@ -128,6 +148,12 @@ If a cell contour length is less than this value, then the result is discarded.
                 Once you are done with the display settings, select
                 the desired output image size/scale, then click the &ldquo;Save&rdquo; button.
                 You will be asked for a .png file name to save the snapshot to.</td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+F7</b></td>
+                <td>Screenshot</td>
+                <td>Copy current viewport contents to clipboard as an image. You can then paste it into
+                an Office document or image editor.</td>
             </tr>
             <tr>
                 <td><b>F10</b></td>

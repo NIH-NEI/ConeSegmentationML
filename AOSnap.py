@@ -33,6 +33,7 @@ class ao_snap_dialog(QtWidgets.QDialog):
         #
         self.contours = []
         self.centers = []
+        self.srcgray = []
         self.voronoi_segments = []
         #
         self._setup_layout()
@@ -422,11 +423,16 @@ class ao_snap_dialog(QtWidgets.QDialog):
     def setContours(self, contours):
         self.contours = []
         self.centers = []
+        self.srcgray = []
         self.voronoi_segments = []
         if contours:
             for contour in contours:
                 self.contours.append([(p[0], p[1]) for p in contour])
                 self.centers.append(contourCenter(contour))
+                self.srcgray.append(False)
+            if hasattr(contours, 'isGray'):
+                for i, contour in enumerate(contours):
+                    self.srcgray[i] = contours.isGray(contour)
                 
         if len(self.centers) > 2:
             clip = SegmentClipper((self.qImg.width(), self.qImg.height()))
@@ -496,16 +502,31 @@ class ao_snap_dialog(QtWidgets.QDialog):
         if self.contour_visibility:
             color = QtGui.QColor(self.contour_color)
             painter.setPen(QtGui.QPen(color, self.contour_width * sc * 0.5, QtCore.Qt.SolidLine))
-            for contour in self.contours:
-                poly = QtGui.QPolygon([QtCore.QPoint(x*sc, y*sc) for x, y in contour])
-                painter.drawPolygon(poly)
+            gray_contours = []
+            for i, contour in enumerate(self.contours):
+                if self.srcgray[i]:
+                    gray_contours.append(contour)
+                else:
+                    poly = QtGui.QPolygon([QtCore.QPoint(x*sc, y*sc) for x, y in contour])
+                    painter.drawPolygon(poly)
+            #
+            if len(gray_contours) > 0:
+                r = int(color.red()*0.25 + 47.8)
+                g = int(color.green()*0.25 + 47.8)
+                b = int(color.blue()*0.25 + 47.8)
+                color = QtGui.QColor(r, g, b)
+                painter.setPen(QtGui.QPen(color, self.contour_width * sc * 0.5, QtCore.Qt.SolidLine))
+                for contour in gray_contours:
+                    poly = QtGui.QPolygon([QtCore.QPoint(x*sc, y*sc) for x, y in contour])
+                    painter.drawPolygon(poly)
         # Glyphs
         if self.glyph_visibility:
             glyph = self._scaled_glyph_poly(sc)
             color = QtGui.QColor(self.glyph_color)
             painter.setPen(QtGui.QPen(color, 1, QtCore.Qt.SolidLine))
             painter.setBrush(QtGui.QBrush(color, QtCore.Qt.SolidPattern))
-            for x, y in self.centers:
+            for i, (x, y) in enumerate(self.centers):
+                if self.srcgray[i]: continue
                 poly = glyph.translated(x*sc, y*sc)
                 painter.drawPolygon(poly)
         # Voronoi diagram

@@ -15,11 +15,12 @@ import scipy.cluster.hierarchy as hcluster
 from pathlib import Path
 from AONetwork import UNet
 from AOColoredGraph import buildRules, buildLookup, Rule, display, getFitness
+from AOMetaList import *
 import itk
 import math
 import datetime
 import AOGenetic
-import multiprocessing
+# import multiprocessing
 
 import multiprocessing as mp
 core_num = mp.cpu_count()
@@ -641,6 +642,9 @@ class ao_method():
             iteration_num = int(levelset_iterations)
             levelset_iterations = (iteration_num, iteration_num+1, 1)
             
+        method = os.path.basename(os.path.dirname(model_weights['contours']))
+        kwarg = {'user':'=auto=', 'method':method, 'FOV':fov, 'MinLen':contour_length}
+            
         # training fov is 0.75, we need to compute fov ratio difference first
         fov_ratio = fov / 0.75
 
@@ -704,6 +708,7 @@ class ao_method():
         res = MultiContourList()
         for iteration_num in range(*levelset_iterations):
             start_ts = datetime.datetime.now()
+            kwarg['LSI'] = iteration_num
             res_contours = self._extract_cell_contours(binary_masks,
                     itk_contour_prob_img, cell_info['centroid'], iteration_num, contour_length)
             # scale res_contours based on the fov_ratio
@@ -711,14 +716,18 @@ class ao_method():
                 for pt in contour_pts:
                     pt[0] = pt[0] / fov_ratio
                     pt[1] = pt[1] / fov_ratio
-            res.add_key(iteration_num, res_contours)
+            mc = MetaList(res_contours, meta=MetaMap(MetaRecord(**kwarg)))
+            mc.meta.addmeta(MetaRecord(), setdefault=True)
+            res.add_key(iteration_num, mc)
             elapsed = datetime.datetime.now() - start_ts
             print('Extract %d cell contours at #iter=%d done in %s' % \
                   (len(res_contours), iteration_num, str(elapsed)))
 
         sz = len(res.keys())
         if sz == 0:
-            return []
+            mc = MetaList([], meta=MetaMap(MetaRecord(**kwarg)))
+            mc.meta.addmeta(MetaRecord(), setdefault=True)
+            return mc
         elif sz == 1:
             return res.contours
         #

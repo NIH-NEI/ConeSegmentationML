@@ -11,7 +11,7 @@ import math
 import SimpleITK as sitk
 from scipy.spatial import Voronoi
 from AOUtil import SegmentClipper, contourCenter
-from AOFileIO import write_points
+#from AOFileIO import write_points
 
 # Patch for QVTKRenderWindowInteractor crashing on some key events, such as Shift+;
 try:
@@ -168,7 +168,23 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         if math.fabs(_ci[0] - self.ci[0]) > 0.01 or math.fabs(_ci[1] - self.ci[1]) > 0.01:
             self.mainWin.push_color_undo(self.ci)
         obj.OnLeftButtonUp()
+    def _update_mouse_pos(self, event):
+        if self.mainWin is None or not hasattr(self.mainWin, 'trackMousePos'):
+            return
+        inter = self.GetInteractor()
+        mx, my = inter.GetEventPosition()
+        pick_value = inter.GetPicker().Pick(mx, my, 0, self.GetDefaultRenderer())
+        if pick_value == 0:
+            x = y = -1
+        else:
+            x, y, z = inter.GetPicker().GetPickPosition()
+            o = self.parent._image_data.GetOrigin()
+            s = self.parent._image_data.GetSpacing()
+            x = x/s[0] - o[0]
+            y = y/s[1] - o[1]
+        self.mainWin.trackMousePos(x, y)
     def mouseMoveEvent(self, obj, event):
+        self._update_mouse_pos(event)
         if self._shift_down:
             obj.OnMouseMove()
             return
@@ -311,6 +327,7 @@ class ao_visualization():
         self._render = vtk.vtkRenderer()
         self._render.AddActor(self._bkg_actor)
         self._render.AddActor(self._image_actor)
+        self._render.AddActor(self._gray_actor)
         self._render.AddActor(self._contour_actor)
         self._render.AddActor(self._annotated_actor)
         self._render.AddActor(self._interactive_contour_actor)
@@ -380,6 +397,23 @@ class ao_visualization():
         self._contour_actor.SetMapper(self._contour_mapper)
         self._contour_actor.GetProperty().SetColor(0, 1., 0)
         self._contour_actor.GetProperty().SetLineWidth(self._contour_width)
+
+        self._gray_points = vtk.vtkPoints()
+        self._gray_points.SetDataTypeToFloat()
+        self._gray_lines = vtk.vtkCellArray()
+        self._gray_poly = vtk.vtkPolyData()
+        self._gray_poly.SetPoints(self._gray_points)
+        self._gray_poly.SetLines(self._gray_lines)
+
+        self._gray_mapper = vtk.vtkPolyDataMapper()
+        self._gray_mapper.SetInputData(self._gray_poly)
+        self._gray_mapper.ScalarVisibilityOff()
+
+        self._gray_actor = vtk.vtkActor()
+        self._gray_actor.SetMapper(self._gray_mapper)
+        self._gray_actor.GetProperty().SetColor(0.25, 0.25, 0.25)
+        self._gray_actor.GetProperty().SetOpacity(0.75)
+        self._gray_actor.GetProperty().SetLineWidth(self._contour_width)
         
         self._annotated_points = vtk.vtkPoints()
         self._annotated_points.SetDataTypeToFloat()
@@ -482,6 +516,10 @@ class ao_visualization():
         self._contour_lines.Initialize()
         self._contour_poly.Modified()
 
+        self._gray_points.Initialize()
+        self._gray_lines.Initialize()
+        self._gray_poly.Modified()
+
         self._annotated_points.Initialize()
         self._annotated_poly.Modified()
 
@@ -563,35 +601,51 @@ class ao_visualization():
             self._edited_contour_widget.Off()
         self._contour_points.Initialize()
         self._contour_lines.Initialize()
+        self._gray_points.Initialize()
+        self._gray_lines.Initialize()
         self._annotated_points.Initialize()
         img_origin = self._image_data.GetOrigin()
         img_spacing = self._image_data.GetSpacing()
+        
+        gray_contours = []
 
         self._contour_centers = []
         edited_pts = None
-        for i, pts in enumerate(contour_pts):
+        for i, _pts in enumerate(contour_pts):
+            pts = [(img_origin[0] + img_spacing[0] * pt[0], img_origin[1] + img_spacing[1] * pt[1]) for pt in _pts]
             x, y = contourCenter(pts)
-            x = img_origin[0] + img_spacing[0] * x
-            y = img_origin[1] + img_spacing[1] * y
             self._contour_centers.append((x, y))
             if not edit_idx is None and edit_idx == i:
-                edited_pts = pts
+                edited_pts = _pts
                 continue
             if len(pts) == 0:
                 continue
-
-            self._annotated_points.InsertNextPoint(x, y, -0.001)
+            
+            if hasattr(contour_pts, 'isGray') and contour_pts.isGray(_pts):
+                gray_contours.append(pts)
+            else:
+                self._annotated_points.InsertNextPoint(x, y, -0.001)
             self._contour_lines.InsertNextCell(len(pts)+1)
             start_index = self._contour_points.GetNumberOfPoints()
             for id, pt in enumerate(pts):
-                self._contour_points.InsertNextPoint(img_origin[0] + img_spacing[0] * pt[0],
-                                                     img_origin[1] + img_spacing[1] * pt[1], 0)
+                self._contour_points.InsertNextPoint(pt[0], pt[1], -0.001)
                 self._contour_lines.InsertCellPoint(id+start_index)
             self._contour_lines.InsertCellPoint(start_index)
+            
+        for i, pts in enumerate(gray_contours):
+            self._gray_lines.InsertNextCell(len(pts)+1)
+            start_index = self._gray_points.GetNumberOfPoints()
+            for id, pt in enumerate(pts):
+                self._gray_points.InsertNextPoint(pt[0], pt[1], -0.002)
+                self._gray_lines.InsertCellPoint(id+start_index)
+            self._gray_lines.InsertCellPoint(start_index)
 
         self._contour_points.Modified()
         self._contour_lines.Modified()
         self._contour_poly.Modified()
+        self._gray_points.Modified()
+        self._gray_lines.Modified()
+        self._gray_poly.Modified()
         self._annotated_points.Modified()
         self._annotated_poly.Modified()
         if not edited_pts is None:
@@ -684,6 +738,7 @@ class ao_visualization():
     def contour_visibility(self, st):
         self._contour_visibility = st
         self._contour_actor.SetVisibility(self._contour_visibility and self._visibility)
+        self._gray_actor.SetVisibility(self._contour_visibility and self._visibility)
     #
     @property
     def contour_width(self):
@@ -692,6 +747,7 @@ class ao_visualization():
     def contour_width(self, width):
         self._contour_width = width
         self._contour_actor.GetProperty().SetLineWidth(self._contour_width)
+        self._gray_actor.GetProperty().SetLineWidth(self._contour_width)
     #
     @property
     def contour_color(self):
@@ -810,6 +866,7 @@ class ao_visualization():
     def visibility(self, st):
         self._visibility = st
         self._contour_actor.SetVisibility(self._contour_visibility and self._visibility)
+        self._gray_actor.SetVisibility(self._contour_visibility and self._visibility)
         self._annotated_actor.SetVisibility(self._glyph_visibility and self._visibility)
         self.updateVoronoiContours()
         self.reset_view()
