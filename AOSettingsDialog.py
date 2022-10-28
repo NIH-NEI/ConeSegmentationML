@@ -985,7 +985,7 @@ class ao_source_dialog(QtWidgets.QDialog):
                 break
         for row in range(self.sourceTable.rowCount()):
             self.sourceTable.cellWidget(row, 0).setChecked(ck)
-        selgf._mute = False
+        self._mute = False
         self._update_selection(False)
     #
     @property

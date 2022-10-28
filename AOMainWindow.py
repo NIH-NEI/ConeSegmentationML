@@ -955,9 +955,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if idx < 0:
             idx = None
         else:
-            contours[idx] = optimizeContour(contours[idx])
-            if hasattr(contours, 'meta'):
-                contours.meta.addobj(contours[idx], contours.meta.default)
+            contours[idx][:] = optimizeContour(contours[idx])
         self._set_contours(self._cur_img_id, idx)
     #
     def UpdateContour(self, idx, contour_pts):
@@ -966,12 +964,14 @@ class MainWindow(QtWidgets.QMainWindow):
         contours = self._input_data['contours'][self._cur_img_id]
         if hasattr(contours, 'contours'):
             contours = contours.contours
-        if contourChanged(contours[idx], contour_pts):
+        meta_changed = False
+        if hasattr(contours, 'meta'):
+            if contours.meta.objmeta(contours[idx]).metakey != contours.meta.default.metakey:
+                meta_changed = True
+        if meta_changed or contourChanged(contours[idx], contour_pts):
             self.push_undo(UndoOp.Added, contour_pts)
             self.push_undo(UndoOp.Removed, contours[idx], False)
             contours[idx] = contour_pts
-            if hasattr(contours, 'meta'):
-                contours.meta.addobj(contours[idx], contours.meta.default)
             self.SaveHistory()
     #
     def _save_data(self):
