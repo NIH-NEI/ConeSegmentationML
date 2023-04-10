@@ -3,7 +3,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 import AOConfig as cfg
 
 cfg.APP_NAME = 'Cone Segmentation (ML)'
-cfg.APP_VERSION = '1.2.0-beta (2022-10-27)'
+cfg.APP_VERSION = '1.2.1-beta (2023-04-07)'
 
 if __name__ == '__main__':
     try:

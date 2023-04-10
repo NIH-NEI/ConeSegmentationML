@@ -1,5 +1,6 @@
-__all__ = ('BASE_DIR', 'ICONS_DIR', 'HELP_DIR', 'qt_icon', 'display_error', 'display_warning', 'askYesNo',
-        'ao_progress_dialog', 'ao_open_dialog', 'ao_loc_dialog', 'ao_parameter_dialog', 'ao_source_dialog',)
+__all__ = ('BASE_DIR', 'ICONS_DIR', 'HELP_DIR', 'qt_icon', 'display_error', 'display_warning',
+        'askYesNo', 'ao_progress_dialog', 'ao_open_dialog', 'ao_loc_dialog', 'ao_parameter_dialog',
+        'ao_source_window', )
 
 import os
 import sys
@@ -8,6 +9,8 @@ import datetime
 import traceback
 
 from PyQt5 import QtCore, QtWidgets, QtGui
+
+from AOMetaList import MetaRecord
 
 if hasattr(sys, '_MEIPASS'):
     BASE_DIR = sys._MEIPASS
@@ -904,23 +907,25 @@ select one of these files when prompted.'''
         self._mute = False
 #
 
-class ao_source_dialog(QtWidgets.QDialog):
-    save_geom = None
-    def __init__(self, parent, callback=None):
-        super(ao_source_dialog, self).__init__(parent)
-        self.callback = callback
+class ao_source_window(QtWidgets.QWidget):
+    def __init__(self, mainwin):
+        super(ao_source_window, self).__init__(None)
+        self.mainwin = mainwin
         #
-        self.setWindowFlags(self.windowFlags() & ~QtCore.Qt.WindowContextHelpButtonHint)
-        self.setSizeGripEnabled(True)
+        self.cmeta = MetaRecord(when=MetaRecord.TODAY, user=MetaRecord.CURRENT_USER)
+        if self.mainwin:
+            self.cmeta.realWho = self.mainwin.getRealName(self.cmeta.user)
+        #
+        flags = self.windowFlags() & ~QtCore.Qt.WindowContextHelpButtonHint
+        #flags |= QtCore.Qt.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
         #
         geom = QtWidgets.QApplication.primaryScreen().geometry()
         self.gw = geom.width()
         self.gh = geom.height()
-        self.resize(self.gw * 40 // 100, self.gh * 32 // 100)
+        self.resize(self.gw * 60 // 100, self.gh * 32 // 100)
         #
         self._contours = None
-        self._meta_list = []
-        self._cb_list = []
         self._mute = False
         #
         self._setup_layout()
@@ -932,82 +937,128 @@ class ao_source_dialog(QtWidgets.QDialog):
         view_layout.setVerticalSpacing(8)
         self.setLayout(view_layout)
         #
-        self.sourceTable = QtWidgets.QTableWidget(0, 3)
+        name_layout = QtWidgets.QGridLayout()
+        name_layout.setColumnStretch(0, 0)
+        name_layout.setColumnStretch(1, 1)
+        view_layout.addLayout(name_layout, 0, 0)
+        nameLabel = QtWidgets.QLabel('Real User Name:')
+        name_layout.addWidget(nameLabel, 0, 0)
+        self.realNameTxt = QtWidgets.QLineEdit()
+        name_layout.addWidget(self.realNameTxt, 0, 1)
+        #
+        self.sourceTable = QtWidgets.QTableWidget(0, 6)
         self.sourceTable.setColumnWidth(0, 8)
-        self.sourceTable.setColumnWidth(1, self.gw * 4 // 100)
-        self.sourceTable.setHorizontalHeaderLabels([u'\u221A', u'Count', u'Annotation Source']);
+        self.sourceTable.setColumnWidth(1, 2)
+        self.sourceTable.setColumnWidth(2, self.gw * 4 // 100)
+        self.sourceTable.setColumnWidth(3, self.gw * 5 // 100)
+        self.sourceTable.setColumnWidth(4, self.gw * 8 // 100)
+        self.sourceTable.setHorizontalHeaderLabels([u'\u221A', u'', u'Count', u'Date', u'User', u'Comment']);
         self.sourceTable.horizontalHeader().setStretchLastSection(True)
         self.sourceTable.verticalHeader().setVisible(False)
-        self.sourceTable.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers);
+        #self.sourceTable.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers);
         self.sourceTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows);
         self.sourceTable.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection);
         self.sourceTable.setShowGrid(False);
         self.sourceTable.horizontalHeader().sectionClicked.connect(self.OnHeaderClicked)
-        view_layout.addWidget(self.sourceTable, 0, 0, 1, 3)
+        view_layout.addWidget(self.sourceTable, 1, 0)
         #
-        self.comm_tip = QtWidgets.QLabel("Optional comment on today's edits.\n"+
-                "Check 'Set as default' to apply to all open files during the current session.")
-        self.comm_tip.setStyleSheet('QLabel {color: #000055;}')
-        view_layout.addWidget(self.comm_tip, 1, 0, 1, 3)
+        btn_layout = QtWidgets.QGridLayout()
+        btn_layout.setColumnStretch(0, 0)
+        btn_layout.setColumnStretch(1, 0)
+        btn_layout.setColumnStretch(2, 1)
+        btn_layout.setColumnStretch(3, 0)
+        btn_layout.setHorizontalSpacing(16)
+        view_layout.addLayout(btn_layout, 2, 0)
+        self.newButton = QtWidgets.QPushButton('New')
+        btn_layout.addWidget(self.newButton, 0, 0)
+        self.delButton = QtWidgets.QPushButton('Delete')
+        btn_layout.addWidget(self.delButton, 0, 1)
+        self.dfltButton = QtWidgets.QPushButton('Default')
+        btn_layout.addWidget(self.dfltButton, 0, 3)
         #
-        self.comm_lab = QtWidgets.QLabel('Comment:')
-        view_layout.addWidget(self.comm_lab, 2, 0)
-        self.comm_txt = QtWidgets.QLineEdit('')
-        self.comm_txt.setMaxLength(80)
-        view_layout.addWidget(self.comm_txt, 2, 1)
-        self.comm_cb = QtWidgets.QCheckBox('Set as default')
-        view_layout.addWidget(self.comm_cb, 2, 2)
-        #
-        self.buttonbox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok |
-                                          QtWidgets.QDialogButtonBox.Cancel)
-        cancelBtn = self.buttonbox.button(QtWidgets.QDialogButtonBox.Cancel)
-        cancelBtn.setText('Reset')
-        self.buttonbox.accepted.connect(self.accept)
-        self.buttonbox.rejected.connect(self.reject)
-        #
-        view_layout.addWidget(self.buttonbox, 3, 0, 1, 3)
+        self.realNameTxt.setText(self.cmeta.realWho)
+        self.realNameTxt.editingFinished.connect(self.onRealNameChanged)
+        self.sourceTable.cellChanged.connect(self.onDescriptionChanged)
+        self.sourceTable.currentCellChanged.connect(self.onCurrentCellChange)
+        self.newButton.clicked.connect(self.onNewButton)
+        self.delButton.clicked.connect(self.onDelButton)
+        self.dfltButton.clicked.connect(self.onDefaultButton)
     #
-    def hideEvent(self, e):
-        ao_source_dialog.save_geom = self.geometry()
-        QtWidgets.QDialog.hideEvent(self, e)
-    def showEvent(self, e):
-        QtWidgets.QDialog.showEvent(self, e)
-        if not ao_source_dialog.save_geom is None:
-            self.setGeometry(ao_source_dialog.save_geom)
+    def onRealNameChanged(self):
+        self.cmeta.realWho = self.realNameTxt.text()
+        MetaRecord.REAL_USER = self.cmeta.realUser if 'realUser' in self.cmeta.__dict__ else None
+        for meta, lst in self._contours.itermapping():
+            if meta.userkey == MetaRecord.current_key():
+                meta.realWho = self.cmeta.realWho
+        self.setMetaList(self._contours)
+        if self.mainwin:
+            self.mainwin.setRealName(self.cmeta.realWho)
+    #
+    def onDescriptionChanged(self, row, col):
+        if self._mute: return
+        if col != 5: return
+        try:
+            comment = self.sourceTable.item(row, col).text().strip()
+            mrec = self._meta_list[row][0]
+            if comment:
+                mrec.__dict__['comment'] = comment
+            else:
+                if 'comment' in mrec.__dict__:
+                    del mrec.comment
+            self._update_defaults()
+        except Exception:
+            pass
     #
     def OnHeaderClicked(self, col):
         if col != 0: return
         self._mute = True
-        ck = True
+        ck = False
         for row in range(self.sourceTable.rowCount()):
-            if self.sourceTable.cellWidget(row, 0).isChecked():
-                ck = False
+            if not self.sourceTable.cellWidget(row, 0).isChecked():
+                ck = True
                 break
         for row in range(self.sourceTable.rowCount()):
             self.sourceTable.cellWidget(row, 0).setChecked(ck)
         self._mute = False
         self._update_selection(False)
     #
-    @property
-    def comment(self):
-        txt = self.comm_txt.text().strip()
-        if len(txt) == 0:
-            txt = None
-        return txt
-    @comment.setter
-    def comment(self, txt):
-        if txt is None:
-            txt = ''
-        self.comm_txt.setText(str(txt))
+    def _update_selection(self, st):
+        if self._mute or not hasattr(self._contours, 'setGrayMeta'):
+            return
+        grayed = []
+        for cb, (meta, cnt) in zip(self._cb_list, self._meta_list):
+            if not cb.isChecked():
+                grayed.append(meta)
+        self._contours.setGrayMeta(grayed)
+        if self.mainwin:
+            self.mainwin._update_sources()
     #
-    @property
-    def comment_default(self):
-        return self.comm_cb.isChecked()
-    @comment_default.setter
-    def comment_default(self, st):
-        self.comm_cb.setChecked(st)
+    def _update_button_status(self):
+        curmeta = self._current_meta()
+        self.delButton.setEnabled(self._contours.meta.can_delete_meta(curmeta))
+        self.dfltButton.setEnabled(self._can_be_default(curmeta))
     #
-    def setMetaList(self, contours):
+    def onCurrentCellChange(self, row, col, prow, pcol):
+        if self._mute: return
+        self._mute = True
+        if col != 5:
+            self.sourceTable.setCurrentCell(row, 5)
+        meta = self._current_meta()
+        if self._can_be_default(meta):
+            self._contours.meta.default = meta
+            if self.mainwin:
+                self.mainwin._set_contours(None)
+        self._mute = False
+        self._update_button_status()
+    #
+    def setMetaList(self, contours, cur_row=-1):
+        if self._mute: return
+        self._mute = True
+        cur_col = -1
+        if contours is self._contours:
+            if cur_row < 0:
+                cur_row = self.sourceTable.currentRow()
+            cur_col = 5
         self._contours = contours
         self._meta_list = []
         self._cb_list = []
@@ -1016,15 +1067,7 @@ class ao_source_dialog(QtWidgets.QDialog):
                 self.sourceTable.setRowCount(0)
                 return
         #
-        mrec = contours.meta.default or {}
-        if hasattr(mrec, 'comment'):
-            self.comment = mrec.comment
-            self.comment_default = mrec.comment == mrec.COMMENT
-        else:
-            self.comment = None
-            self.comment_default = False
-        #
-        for meta, lst in contours.itermapping():
+        for meta, lst in self._contours.itermapping():
             self._meta_list.append((meta, len(lst)))
         self.sourceTable.setRowCount(len(self._meta_list))
         #
@@ -1035,22 +1078,100 @@ class ao_source_dialog(QtWidgets.QDialog):
             self.sourceTable.setCellWidget(row, 0, cb)
             cb.toggled.connect(self._update_selection)
             self._cb_list.append(cb)
+            item = QtWidgets.QTableWidgetItem('')
+            item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable);
+            self.sourceTable.setItem(row, 1, item)
             item = QtWidgets.QTableWidgetItem(f'{cnt}   ')
             item.setTextAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter);
-            self.sourceTable.setItem(row, 1, item)
-            self.sourceTable.setItem(row, 2, QtWidgets.QTableWidgetItem(str(meta)))
+            item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable);
+            self.sourceTable.setItem(row, 2, item)
+            item = QtWidgets.QTableWidgetItem(meta.when)
+            item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable);
+            self.sourceTable.setItem(row, 3, item)
+            item = QtWidgets.QTableWidgetItem(meta.realWho)
+            item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable);
+            self.sourceTable.setItem(row, 4, item)
+            item = QtWidgets.QTableWidgetItem(meta.description)
+            if meta.userkey != MetaRecord.current_key():
+                item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable);
+            else:
+                hi = 0xF0 if row&1 == 0 else 0xF8
+                item.setBackground(QtGui.QBrush(QtGui.QColor(hi, hi, 0xFF)))
+                item.setForeground(QtGui.QBrush(QtGui.QColor(0, 0, 0x55)))
+            self.sourceTable.setItem(row, 5, item)
+        #
+        self.sourceTable.clearSelection()
+        self.sourceTable.setCurrentCell(cur_row, cur_col)
+        self._update_defaults()
+        self._mute = False
     #
-    def _update_selection(self, st):
-        if self._mute or not hasattr(self._contours, 'setGrayMeta'):
+    def onNewButton(self):
+        self.sourceTable.setFocus()
+        self._mute = True
+        meta = MetaRecord(user=MetaRecord.CURRENT_USER)
+        self._contours.meta.addmeta(meta, newid=True, setdefault=True)
+        if self.mainwin:
+            self.mainwin._set_contours(None)
+        self._mute = False
+        self.setMetaList(self._contours, cur_row=0)
+    #
+    def onDelButton(self):
+        self.sourceTable.setFocus()
+        meta = self._current_meta()
+        if not self._contours.meta.can_delete_meta(meta):
             return
-        grayed = []
-        for cb, (meta, cnt) in zip(self._cb_list, self._meta_list):
-            if not cb.isChecked():
-                grayed.append(meta)
-        self._contours.setGrayMeta(grayed)
-        if self.callback:
-            self.callback()
+        self._mute = True
+        self._contours.meta.delmeta(meta)
+        if self.mainwin:
+            self.mainwin._set_contours(None)
+        self._mute = False
+        self.setMetaList(self._contours, cur_row=0)
     #
-
-
+    def _can_be_default(self, meta):
+        if meta is None: return False
+        return meta.userkey == MetaRecord.current_key()
+    #
+    def _update_defaults(self):
+        has_default = False
+        self._mute = True
+        for row, (meta, cnt) in enumerate(self._meta_list):
+            st = ''
+            if MetaRecord.COMMENT and self._can_be_default(meta) and not 'comment' in meta.__dict__:
+                self.sourceTable.item(row, 5).setText(MetaRecord.COMMENT)
+                if not has_default:
+                    st = '*'
+                    has_default = True
+            self.sourceTable.item(row, 1).setText(st)
+        self._mute = False
+        self._update_button_status()
+    #
+    def _current_meta(self):
+        try:
+            return self._meta_list[self.sourceTable.currentRow()][0]
+        except Exception:
+            return None
+    #
+    def onDefaultButton(self):
+        self.sourceTable.setFocus()
+        meta = self._current_meta()
+        if not self._can_be_default(meta):
+            return
+        #
+        if MetaRecord.COMMENT:
+            for _meta, cnt in self._meta_list:
+                if _meta.userkey == meta.userkey and not 'comment' in _meta.__dict__:
+                    _meta.__dict__['comment'] = MetaRecord.COMMENT
+        #
+        row = self.sourceTable.currentRow()
+        if self.sourceTable.item(row, 1).text() == '*':
+            MetaRecord.COMMENT = None
+        else:
+            txt = self.sourceTable.item(row, 5).text().strip()
+            if not txt:
+                txt = None
+            MetaRecord.COMMENT = txt
+            if 'comment' in meta.__dict__:
+                del meta.__dict__['comment']
+        self._update_defaults()
+    #
 

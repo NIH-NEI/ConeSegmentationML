@@ -1,5 +1,5 @@
 APPNAME="ConeSegmentationML"
-VERSION="1.2.0-beta"
+VERSION="1.2.1-beta"
 rm -rf build/
 rm -rf dist/
 pyinstaller --clean --noconfirm build-app-dir.spec

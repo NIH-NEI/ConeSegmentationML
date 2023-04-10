@@ -80,6 +80,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._cur_img_id = -1
         self.loadDir = QtCore.QDir.home()
         self.saveDir = QtCore.QDir.home()
+        self.realNameMap = {}
 
         # State dir/file
         self.state_dir = os.path.join(os.path.expanduser('~'), '.ConeSegmentationML')
@@ -151,8 +152,16 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.saveDir = QtCore.QDir(jobj['saveDir'])
             if 'extended' in jobj:
                 self.extended = jobj['extended']
+            if 'realNameMap' in jobj:
+                for usern, realn in jobj['realNameMap'].items():
+                    self.realNameMap[usern] = realn
         except Exception:
             pass
+        usern = self.getUserName()
+        if usern in self.realNameMap:
+            realn = self.realNameMap[usern]
+            if realn and realn != usern:
+                MetaRecord.REAL_USER = self.getRealName()
         self._sync_display_controls()
     def saveState(self):
         try:
@@ -168,6 +177,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 'segmentation_para': self._segmentation_para_dlg.state,
                 'displaySettings': self._image_view.displaySettings,
                 'extended': self.extended,
+                'realNameMap': self.realNameMap,
             }
             if not ldir is None:
                 jobj['loadDir'] = ldir
@@ -177,6 +187,23 @@ class MainWindow(QtWidgets.QMainWindow):
                 json.dump(jobj, fo, indent=2)
         except Exception:
             pass
+    #
+    def getUserName(self):
+        return os.getenv('USERNAME', '=Anonymous=')
+    def getRealName(self, usern=None):
+        if usern is None:
+            usern = self.getUserName()
+        if usern in self.realNameMap:
+            return self.realNameMap[usern]
+        return usern
+    def setRealName(self, realn):
+        usern = os.getenv('USERNAME', '=Anonymous=')
+        if realn and realn != usern:
+            self.realNameMap[usern] = realn
+        else:
+            if usern in self.realNameMap:
+                del self.realNameMap[usern]
+        self.saveState()
     #
     def dragEnterEvent(self, e):
         e.acceptProposedAction()
@@ -192,8 +219,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self._open_contour_list(csv_filenames, strict)
     #
     def closeEvent(self, e):
-        if hasattr(self, 'helpWindow'):
-            self.helpWindow.close()
+        for winname in ('helpwindow', 'srcwin'):
+            if hasattr(self, winname):
+                getattr(self, winname).close()
         self._image_view.cancel_editing()
         self.saveState()
         e.accept()
@@ -594,6 +622,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if len(img_filenames) is not 0:
             self._initialize_input_data()
             self._image_view.reset_color()
+            metainit()
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
             self._progress_dlg.setWindowTitle('Open Images')
             self._progress_dlg.show()
@@ -720,7 +749,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._cur_img_id = newrow
         self._display_image(self._cur_img_id)
     #
+    def _update_source_win(self, contours):
+        if self._mute: return
+        if hasattr(self, 'srcwin') and self.srcwin.isVisible():
+            self.srcwin.setMetaList(contours)
+    #
     def _set_contours(self, idx, edit_idx=None):
+        if idx is None:
+            idx = self._cur_img_id
         contours = self._input_data['contours'][idx]
         if hasattr(contours, 'contours'):
             self._image_view.set_contours(contours.contours, edit_idx)
@@ -731,6 +767,7 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self._image_view.set_contours(contours, edit_idx)
             self._iter_slider_status(None)
+        self._update_source_win(contours)
     #
     def _display_image(self, idx):
         self.clear_undo()
@@ -865,7 +902,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._image_view.color_info = e.data
             if e.last: break
         if modified:
-            self._image_view.set_contours(contours)
+            self._set_contours(self._cur_img_id)
             self.SaveHistory()
         self.undo_act.setEnabled(len(self._undo_buf) > 0)
     #
@@ -973,9 +1010,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self.push_undo(UndoOp.Removed, contours[idx], False)
             contours[idx] = contour_pts
             self.SaveHistory()
+            self._update_source_win(contours)
     #
     def _save_data(self):
         if len(self._input_data['images']) == 0: return
+        self._image_view.cancel_editing()
         try:
             try:
                 sdir = self.saveDir.canonicalPath()
@@ -1059,8 +1098,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.status(msg, temp=True)
     #
     def _update_sources(self):
+        self._mute = True
         self._set_contours(self._cur_img_id)
         self._image_view.reset_view()
+        self._mute = False
     #
     def resetSources(self, update=False):
         id = self._cur_img_id
@@ -1074,55 +1115,22 @@ class MainWindow(QtWidgets.QMainWindow):
         if update:
             self._image_view.reset_view()
     #
-    def _update_user_comment(self, comment, comment_default):
-        try:
-            assert self._cur_img_id >= 0
-            contours = self._input_data['contours'][self._cur_img_id]
-            if hasattr(contours, 'contours'):
-                _contours = contours.contours
-            else:
-                _contours = [contours]
-            for contours in _contours:
-                mrec = contours.meta.default
-                if comment:
-                    mrec.__dict__['comment'] = comment
-                else:
-                    if 'comment' in mrec.__dict__:
-                        del mrec.comment
-        except Exception:
-            pass
-        #
-        if comment_default:
-            MetaRecord.COMMENT = comment
-            if MetaRecord.COMMENT:
-                for contours in self._input_data['contours']:
-                    if hasattr(contours, 'contours'):
-                        _contours = contours.contours
-                    else:
-                        _contours = [contours]
-                for contours in _contours:
-                    try:
-                        mrec = contours.meta.default
-                        if not hasattr(mrec, 'comment'):
-                            mrec.__dict__['comment'] = MetaRecord.COMMENT
-                    except Exception:
-                        pass
-    #   
     def _select_annotation_sources(self, e):
         id = self._cur_img_id
         if id < 0: return
         contours = self._input_data['contours'][id]
         if hasattr(contours, 'contours'):
             contours = contours.contours
-        if len(contours) == 0: return
+        #if len(contours) == 0: return
+
+        self._image_view.cancel_editing()
         self._image_view.visibility = True
         self._sync_display_controls()
         self._image_view.reset_view()
-        dlg = ao_source_dialog(self, callback=self._update_sources)
-        dlg.setMetaList(contours)
-        rc = dlg.exec_()
-        if not rc:
-            self.resetSources(update=True)
-        else:
-            self._update_user_comment(dlg.comment, dlg.comment_default)
+        
+        if not hasattr(self, 'srcwin'):
+            self.srcwin = ao_source_window(self)
+        self.srcwin.setMetaList(contours)
+        self.srcwin.show()
+        self.srcwin.activateWindow()
     #
