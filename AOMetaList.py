@@ -1,10 +1,35 @@
-__all__ = ('MetaRecord', 'MetaMap', 'MetaList', 'metainit',)
+__all__ = ('MetaRecord', 'MetaMap', 'MetaList', 'ContourGeom', 'metainit',)
 
 import os, sys
 import datetime, json
+from collections import namedtuple, defaultdict
+import math
 
 def metainit():
     MetaRecord.TODAY = datetime.datetime.now().strftime('%Y-%m-%d')
+
+ContourGeom = namedtuple('ContourGeom', ['xc', 'yc', 'radius'])
+def togeom(o):
+    if isinstance(o, ContourGeom):
+        return o
+    if isinstance(o, tuple) and len(o) == 3:
+        return ContourGeom(float(o[0]), float(o[1]), float(o[2]))
+    if not isinstance(o, list) or len(o) < 1 or len(o[0]) != 2:
+        raise ValueError('Must be list of tuples (x,y)')
+    n = len(o)
+    xc = yc = 0.
+    for pt in o:
+        xc += pt[0]
+        yc += pt[1]
+    xc /= n
+    yc /= n
+    radius = 0.
+    for pt in o:
+        dx = xc - pt[0]
+        dy = yc - pt[1]
+        radius += dx*dx + dy*dy
+    radius = math.sqrt(radius/n)
+    return ContourGeom(xc, yc, radius)
 
 class MetaRecord(object):
     CURRENT_USER = os.getenv('USERNAME', os.getenv('USER', '=Anonymous='))
@@ -97,6 +122,10 @@ class MetaMap(object):
         #
         self._metamap = {self._default.metakey : self._default}
         self._omap = {}
+        #
+        self._oregistry = {}
+        self._created = {}
+        self._deleted = {}
     #
     @property
     def default(self):
@@ -163,11 +192,22 @@ class MetaMap(object):
         return True
     #
     def addobj(self, obj, meta=None):
-        if id(obj) in self._omap and meta is None:
+        oid = id(obj)
+        if oid in self._omap and meta is None:
             return
         if meta is None:
             meta = self._default
-        self._omap[id(obj)] = meta
+        self._omap[oid] = meta
+        #
+        mkey = meta.metakey
+        self._oregistry[oid] = obj
+        if not oid in self._created:
+            self._created[oid] = mkey
+    #
+    def delobj(self, obj, meta=None):
+        if meta is None:
+            meta = self._default
+        self._deleted[id(obj)] = meta.metakey
     #
     def objmeta(self, obj):
         return self._omap.get(id(obj))
@@ -194,6 +234,137 @@ class MetaMap(object):
             lst = mmap[mkey]
             yield self._metamap[mkey], lst
     #
+
+class MetaTracker(object):
+    class MetaCounter(object):
+        __slots__ = ('active', 'created', 'deleted', 'modified')
+        def __init__(self):
+            self.active = 0
+            self.created = 0
+            self.deleted = 0
+            self.modified = 0
+    #
+    def __init__(self, meta, olist):
+        self.meta = meta
+        self.olist = olist
+        #
+        self.idmap = dict([(id(o), o) for o in olist])
+        #
+        self.galive = {}
+        self.gdead = {}
+        self.metaset = set()
+        self.metaset.add(self.meta.default.metakey)
+        for oid, obj in self.meta._oregistry.items():
+            og = togeom(obj)
+            if oid in self.idmap:
+                self.galive[oid] = og
+            else:
+                self.gdead[oid] = og
+            mrec = self.meta._omap.get(oid, self.meta._default)
+            self.metaset.add(mrec.metakey)
+        #
+        self.delomap = defaultdict(set)
+        for oid, mkey in self.meta._deleted.items():
+            self.delomap[mkey].add(oid)
+        #
+        self.creomap = defaultdict(set)
+        for oid, mkey in self.meta._created.items():
+            if mkey in self.delomap:
+                deadset = self.delomap[mkey]
+                if oid in deadset:
+                    deadset.remove(oid)
+                    continue
+            self.creomap[mkey].add(oid)
+    #
+    def iteroutput(self):
+        metaord = sorted(self.metaset)
+        metareg = {}
+        metamap = {self.meta.default.metakey : []}
+        nextmid = 1
+        for mkey in metaord:
+            metareg[mkey] = nextmid
+            nextmid += 1
+            metamap[mkey] = []
+        #
+        for obj in self.olist:
+            oid = id(obj)
+            mrec = self.meta._omap.get(oid, None)
+            if not mrec:
+                mrec = self.meta._default
+                self.meta._omap[oid] = mrec
+            metamap[mrec.metakey].append(obj)
+        #
+        for mkey in metaord:
+            mrec = self.meta._metamap[mkey]
+            mstr = json.dumps(mrec.as_jsonable())
+            yield ['#meta', mstr]
+            for pts in metamap[mkey]:
+                flatcont = []
+                for pt in pts:
+                    flatcont.append(f'{pt[0]:.3f}')
+                    flatcont.append(f'{pt[1]:.3f}')
+                yield flatcont
+        #
+        for delmkey, oids in self.delomap.items():
+            delmid = metareg[delmkey]
+            for oid in oids:
+                if not oid in self.gdead: continue
+                og = self.gdead[oid]
+                cremkey = self.meta._created[oid]
+                yield ['#del', metareg[cremkey], delmid, og.xc, og.yc, og.radius]
+    #
+    def finddead(self, og, delset):
+        for oid in delset:
+            if not oid in self.gdead: continue
+            og1 = self.gdead[oid]
+            dx = og1.xc - og.xc
+            dy = og1.yc - og.yc
+            dist = math.sqrt(dx*dx + dy*dy)
+            if dist < (og.radius + og1.radius)*0.25:
+                return oid
+        return None
+    #
+    def getstats(self):
+        replaces = set()
+        replacedby = set()
+        for mkey, creset in self.creomap.items():
+            delset = self.delomap[mkey]
+            for oid in creset:
+                if oid in self.galive:
+                    og = self.galive[oid]
+                else:
+                    og = self.gdead[oid]
+                poid = self.finddead(og, delset)
+                if not poid is None:
+                    replaces.add(oid)
+                    replacedby.add(poid)
+        #
+        stats = defaultdict(MetaTracker.MetaCounter)
+        for oid in self.idmap.keys():
+            mrec = self.meta._omap.get(oid, self.meta._default)
+            stats[mrec.metakey].active += 1
+        #
+        for mkey, creset in self.creomap.items():
+            cntr = stats[mkey]
+            for oid in creset:
+                if oid in replaces:
+                    cntr.modified += 1
+                else:
+                    cntr.created += 1
+        #
+        for mkey, delset in self.delomap.items():
+            cntr = stats[mkey]
+            for oid in delset:
+                if oid in self.idmap or oid in replacedby:
+                    continue
+                cntr.deleted += 1
+        res = []
+        for mkey in sorted(stats.keys()):
+            mrec = self.meta._metamap[mkey]
+            res.append((mrec, stats[mkey]))
+        return res
+    #
+            
 
 class MetaList(object):
     FWD_LIST_ATTR = ['clear', 'copy', 'count', 'index', 'pop', 'remove', 'reverse', 'sort']
@@ -236,6 +407,18 @@ class MetaList(object):
             return self._lst.__getattribute__(item)
         return super(MetaList, self).__getattribute__(item)
     #
+    def _idmap(self):
+        return dict([(id(o), o) for o in self._lst])
+    def _finddeleted(self, idmap):
+        for o in self._lst:
+            oid = id(o)
+            if oid in idmap:
+                del idmap[oid]
+        return idmap.values()
+    def _markdeleted(self, idmap):
+        for o in self._finddeleted(idmap):
+            self._meta.delobj(o)
+    #
     def append(self, x):
         self._lst.append(x)
         self._meta.addobj(x)
@@ -246,8 +429,10 @@ class MetaList(object):
             self._meta.addobj(x)
     #
     def update(self, iterable):
+        idmap = self._idmap()
         self._lst.clear()
         self.extend(iterable)
+        self._markdeleted(idmap)
     #
     def insert(self, i, x):
         self._lst.insert(i, x)
@@ -271,16 +456,27 @@ class MetaList(object):
     def __getitem__(self, key):
         return self._lst.__getitem__(key)
     def __setitem__(self, key, value):
+        idmap = self._idmap()
         self._lst.__setitem__(key, value)
         self._meta.addobj(value)
+        self._markdeleted(idmap)
     def __delitem__(self, key):
-        return self._lst.__delitem__(key)
+        idmap = self._idmap()
+        rc = self._lst.__delitem__(key)
+        self._markdeleted(idmap)
+        return rc
     def __iter__(self):
         return self._lst.__iter__()
     def __reversed__(self):
         return self._lst.__reversed__()
     def __contains__(self, item):
         return self._lst.__contains__(item)
+    #
+    def gettracker(self):
+        return MetaTracker(self._meta, self._lst)
+    def iteroutput(self):
+        tracker = self.gettracker()
+        return tracker.iteroutput()
     #
 
 metainit()

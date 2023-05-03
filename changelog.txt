@@ -1,4 +1,8 @@
-#### Version 1.2.1-beta (2022-10-21) ####
+#### Version 1.2.2-beta (2022-05-01) ####
+- Added "Export Annotation Stats..." item to the "File" menu. It exports annotation tracker statistics (like
+who and when created/deleted/modified how many annotations).
+
+#### Version 1.2.1-beta (2023-04-07) ####
 - Annotation source dialog converted to non-modal window, allowing users to work with annotations on the main screen
 without closing this window.
 - Added "Real User" field, users using the same system account can enter their real names.

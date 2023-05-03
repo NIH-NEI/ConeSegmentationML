@@ -324,6 +324,10 @@ class MainWindow(QtWidgets.QMainWindow):
                     toolTip='Save segmentation results (contours-annotations)',
                     triggered=self._save_data)
 
+        self.save_stats_act = QtWidgets.QAction('Export Annotation Stats...', self,
+                    toolTip='Export Statistics from the Annotation Tracking system',
+                    triggered=self._save_stats)
+
         self.delete_all_act = QtWidgets.QAction('Delete Annotations', self,
                                       statusTip='Delete all annotations on current image', triggered=self._delete_all)
 
@@ -338,6 +342,7 @@ class MainWindow(QtWidgets.QMainWindow):
         file_menu = self.menuBar().addMenu("&File")
         file_menu.addAction(self.open_image_act)
         file_menu.addAction(self.save_data_act)
+        file_menu.addAction(self.save_stats_act)
         file_menu.addSeparator()
         file_menu.addAction(self.delete_all_act)
         advMenu = file_menu.addMenu('Advanced Options')
@@ -1134,3 +1139,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.srcwin.show()
         self.srcwin.activateWindow()
     #
+    def _save_stats(self):
+        if len(self._input_data['images']) == 0: return
+        self._image_view.cancel_editing()
+        try:
+            try:
+                sdir = self.saveDir.canonicalPath()
+            except Exception:
+                sdir = QtCore.QDir.homePath()
+            dir_name = QtWidgets.QFileDialog.getExistingDirectory(self, \
+                    'Select Export directory', sdir)
+            if not dir_name:
+                return
+            
+            cnt = self._file_io.write_annotation_stats(dir_name, self._input_data)
+            self.status('%d Annotation Tracker Statistics file(s) exported to %s' % (cnt, dir_name))
+            #self._update_listwidget(self._input_data['image file paths'], newlist=False)
+            #self.saveDir = QtCore.QDir(dir_name)
+            #self.saveState()
+        except Exception as ex:
+            display_error('Error annotation stats', ex)
