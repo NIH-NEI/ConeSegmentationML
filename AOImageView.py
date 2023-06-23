@@ -54,6 +54,8 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         self.AddObserver("KeyReleaseEvent", self.keyReleaseEvent)
         self._tolerance = 0.
         #
+        self._skip_mouse = False
+        #
         self._mouse_down = False
         self._ctrl_down = False
         self._shift_down = False
@@ -94,6 +96,7 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
             return True
         return not self._win and self._alt_down
     def leftButtonPressEvent(self, obj, event):
+        if self._skip_mouse: return
         while QtWidgets.QApplication.overrideCursor():
             QtWidgets.QApplication.restoreOverrideCursor()
         if not self._mouse_in:
@@ -134,6 +137,7 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
             return
         obj.OnLeftButtonDown()
     def leftButtonReleaseEvent(self, obj, event):
+        if self._skip_mouse: return
         self._mouse_down = False
         while QtWidgets.QApplication.overrideCursor():
             QtWidgets.QApplication.restoreOverrideCursor()
@@ -207,6 +211,13 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
                     self.parent.reset_view(False)
                 return
         obj.OnMouseMove()
+        if self._mouse_down:
+            self.parent.validate_color_info()
+            _ci = self.parent.color_info
+            if math.fabs(_ci[0] - self.ci[0]) > 0.01 or math.fabs(_ci[1] - self.ci[1]) > 0.01:
+                if hasattr(self.mainWin, 'onIWci'):
+                    self.mainWin.onIWci(_ci)
+    #
     def middleButtonPressEvent(self, obj, event):
         while QtWidgets.QApplication.overrideCursor():
             QtWidgets.QApplication.restoreOverrideCursor()
@@ -302,6 +313,240 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         obj.OnKeyRelease()
     #
     
+class ao_resize_box():
+    CURSORS = [QtCore.Qt.ArrowCursor,
+               QtCore.Qt.SizeFDiagCursor, QtCore.Qt.SizeVerCursor, QtCore.Qt.SizeBDiagCursor,
+               QtCore.Qt.SizeHorCursor,
+               QtCore.Qt.SizeFDiagCursor, QtCore.Qt.SizeVerCursor, QtCore.Qt.SizeBDiagCursor,
+               QtCore.Qt.SizeHorCursor,]
+    def __init__(self):
+        self._box_pts = []
+        self._box_polys = []
+        #
+        self.observers = []
+        #
+        self._box_points = vtk.vtkPoints()
+        self._box_points.SetDataTypeToFloat()
+        self._box_lines = vtk.vtkCellArray()
+        self._box_poly = vtk.vtkPolyData()
+        self._box_poly.SetPoints(self._box_points)
+        self._box_poly.SetLines(self._box_lines)
+        #
+        self._box_mapper = vtk.vtkPolyDataMapper()
+        self._box_mapper.SetInputData(self._box_poly)
+        self._box_mapper.ScalarVisibilityOff()
+        #
+        self._box_actor = vtk.vtkActor()
+        self._box_actor.SetMapper(self._box_mapper)
+        self._box_actor.GetProperty().SetColor(1., 0.75, 0.25)
+        self._box_actor.GetProperty().SetLineWidth(1.)
+        self._box_actor.GetProperty().SetVertexVisibility(False)
+        #self._box_actor.GetProperty().SetPointSize(10.)
+        #
+        self._mouse_down = False
+        self._last_pos = [0, 0]
+        self._vidx = -1
+        self._save_pos = [0, 0]
+        self._save_box_pts = []
+        self._save_edited_pts = []
+        self._img_dims = [1., 1.]
+        # self._img_dims = self.vis.get_image_dimensions()
+    #
+    def AddObserver(self, event, callback):
+        if event == vtk.vtkCommand.InteractionEvent:
+            self.observers.append(callback)
+    #
+    def hook(self, vis):
+        self.vis = vis
+        self._style = vis._style
+        self.inter = self._style.GetInteractor()
+        #
+        self.vis._render.AddActor(self._box_actor)
+        #
+        self._style.AddObserver("MouseMoveEvent", self.mouseMoveEvent)
+        self._style.AddObserver("LeftButtonPressEvent", self.leftButtonPressEvent)
+        self._style.AddObserver("LeftButtonReleaseEvent", self.leftButtonReleaseEvent)
+    #
+    def _active_idx(self, pos):
+        x = pos[0]
+        y = pos[1]
+        for i, poly in enumerate(self._box_polys):
+            if len(poly) != 4: continue
+            tl = poly[0]
+            br = poly[2]
+            if x>=tl[0] and x<=br[0] and y>=tl[1] and y<=br[1]:
+                return i
+        return -1
+    def _vertex_idx(self):
+        inter = self._style.GetInteractor()
+        mx, my = inter.GetEventPosition()
+        pick_value = inter.GetPicker().Pick(mx, my, 0, self._style.GetDefaultRenderer())
+        if pick_value != 0:
+            self._last_pos = inter.GetPicker().GetPickPosition()
+            return pick_value, self._active_idx(self._last_pos)
+        return pick_value, -1
+    #
+    def _update_resize_box(self):
+        o = self.vis.origin
+        s = self.vis.spacing
+        #
+        dx = self._last_pos[0] - self._save_pos[0]
+        dy = self._last_pos[1] - self._save_pos[1]
+        #
+        x0 = o[0] - s[0]
+        y0 = o[1] - s[1]
+        x1 = o[0] + self._img_dims[0] + s[0]
+        y1 = o[1] + self._img_dims[1] + s[1]
+        #
+        xmin = xmin0 = self._save_box_pts[0][0]
+        ymin = ymin0 = self._save_box_pts[0][1]
+        xmax = xmax0 = self._save_box_pts[4][0]
+        ymax = ymax0 = self._save_box_pts[4][1]
+        xc = yc = 0.
+        xscale = yscale = 1.
+        if self._vidx in (1, 7, 8):
+            xmin += dx
+            if xmin < x0: xmin = x0
+            if xmin > xmax - 2.*s[0]: xmin = xmax - 2.*s[0]
+            xc = xmax
+            xscale = (xmin - xc) / (xmin0 - xc)
+        if self._vidx in (3, 4, 5):
+            xmax += dx
+            if xmax > x1: xmax = x1
+            if xmax < xmin + 2.*s[0]: xmax = xmin + 2.*s[0]
+            xc = xmin
+            xscale = (xmax - xc) / (xmax0 - xc)
+        if self._vidx in (1, 2, 3):
+            ymin += dy
+            if ymin < y0: ymin = y0
+            if ymin > ymax - 2.*s[1]: ymin = ymax - 2.*s[1]
+            yc = ymax
+            yscale = (ymin - yc) / (ymin0 - yc)
+        if self._vidx in (5, 6, 7):
+            ymax += dy
+            if ymax > y1: ymax = y1
+            if ymax < ymin + 2.*s[1]: ymax = ymin + 2.*s[1]
+            yc = ymin
+            yscale = (ymax - yc) / (ymax0 - yc)
+        self._update_box(xmin, ymin, xmax, ymax)
+        self.edited_pts = []
+        _edited_pts = []
+        for pt in self._save_edited_pts:
+            x = (pt[0] - xc) * xscale + xc
+            y = (pt[1] - yc) * yscale + yc
+            self.edited_pts.append([x, y])
+            _edited_pts.append([x/s[0] - o[0], y/s[1] - o[1]])
+        for obs in self.observers:
+            obs(self, _edited_pts)
+        self.vis.reset_view()
+    #
+    def mouseMoveEvent(self, obj, event):
+        if len(self._box_polys) > 8 and not self._style._shift_down and not self._style._GetControlKey():
+            pick_value, idx = self._vertex_idx()
+            if self._mouse_down:
+                if pick_value != 0:
+                    self._update_resize_box()
+                #obj.OnMouseMove()
+                return
+            if pick_value != 0:
+                while QtWidgets.QApplication.overrideCursor():
+                    QtWidgets.QApplication.restoreOverrideCursor()
+                if idx >= 0:
+                    QtWidgets.QApplication.setOverrideCursor(self.CURSORS[idx])
+    #
+    def leftButtonPressEvent(self, obj, event):
+        if len(self._box_polys) > 8 and not self._style._shift_down and not self._style._GetControlKey():
+            pick_value, idx = self._vertex_idx()
+            if pick_value != 0:
+                while QtWidgets.QApplication.overrideCursor():
+                    QtWidgets.QApplication.restoreOverrideCursor()
+                if idx >= 0:
+                    QtWidgets.QApplication.setOverrideCursor(self.CURSORS[idx])
+                    self._mouse_down = True
+                    self._style._skip_mouse = True
+                    self._vidx = idx
+                    self._save_pos = self._last_pos
+                    self._save_box_pts = self._box_pts[:]
+                    self._save_edited_pts = self.edited_pts[:]
+                    self._img_dims = self.vis.get_image_dimensions()
+    #
+    def leftButtonReleaseEvent(self, obj, event):
+        if self._mouse_down:
+            self._mouse_down = False
+            self._style._skip_mouse = False
+            self.mouseMoveEvent(obj, event)
+    #
+    def Initialize(self):
+        self._box_points.Initialize()
+        self._box_lines.Initialize()
+    def Modified(self):
+        self._box_points.Modified()
+        self._box_lines.Modified()
+        self._box_poly.Modified()
+    #
+    def enable(self, _edited_pts):
+        o = self.vis.origin
+        s = self.vis.spacing
+        self.edited_pts = [[o[0] + s[0]*pt[0], o[1] + s[1]*pt[1]] for pt in _edited_pts]
+        #
+        xmin = xmax = ymin = ymax = None
+        for pt in self.edited_pts:
+            x = pt[0]
+            y = pt[1]
+            if xmin is None:
+                xmin = xmax = x
+                ymin = ymax = y
+            else:
+                if x < xmin: xmin = x
+                if x > xmax: xmax = x
+                if y < ymin: ymin = y
+                if y > ymax: ymax = y
+        sc = 1.5
+        xmin -= sc*s[0]
+        ymin -= sc*s[1]
+        xmax += sc*s[0]
+        ymax += sc*s[1]
+        #
+        self._update_box(xmin, ymin, xmax, ymax)
+    #
+    def _update_box(self, xmin, ymin, xmax, ymax):
+        o = self.vis.origin
+        s = self.vis.spacing
+        xmid = (xmin + xmax) / 2.
+        ymid = (ymin + ymax) / 2.
+        
+        self.Initialize()
+        self._box_actor.SetVisibility(True)
+        
+        self._box_pts = [[xmin, ymin], [xmid, ymin], [xmax, ymin],
+                [xmax, ymid],
+                [xmax, ymax], [xmid, ymax], [xmin, ymax],
+                [xmin, ymid],]
+        #
+        self._box_polys = [self._box_pts]
+        dx = s[0]*0.75
+        dy = s[1]*0.75
+        for x, y in self._box_pts:
+            self._box_polys.append([ [x-dx, y-dy], [x+dx, y-dy], [x+dx, y+dy], [x-dx, y+dy] ])
+        #
+        for i, pts in enumerate(self._box_polys):
+            self._box_lines.InsertNextCell(len(pts)+1)
+            start_index = self._box_points.GetNumberOfPoints()
+            for id, pt in enumerate(pts):
+                self._box_points.InsertNextPoint(pt[0], pt[1], -0.01)
+                self._box_lines.InsertCellPoint(id+start_index)
+            self._box_lines.InsertCellPoint(start_index)
+        #
+        self.Modified()
+    #
+    def disable(self):
+        self._box_actor.SetVisibility(False)
+        self._box_pts = []
+        self._box_polys = []
+        self.Initialize()
+        self.Modified()
+    #
+    
 class ao_visualization():
     def __init__(self, vtk_widget, parent=None):
         self._vtk_widget = vtk_widget
@@ -318,11 +563,18 @@ class ao_visualization():
         self._edited_contour_width = 3
         self._voronoi_contour_width = 1.5
         
+        self._min_color_level = -256.
+        self._max_color_level = 512.
+        self._min_color_window = 0.1
+        self._max_color_window = 4096.
+        
         self._draw_contours()
         self._draw_interactive_contours()
         self._draw_edited_contours()
         self._draw_voronoi_contours()
         self._draw_background_region()
+        
+        self._resize_box = ao_resize_box()
         #
         self._render = vtk.vtkRenderer()
         self._render.AddActor(self._bkg_actor)
@@ -332,7 +584,6 @@ class ao_visualization():
         self._render.AddActor(self._annotated_actor)
         self._render.AddActor(self._interactive_contour_actor)
         self._render.AddActor(self._voronoi_contour_actor)
-        self._render.ResetCamera()
 
         self._vtk_widget.GetRenderWindow().AddRenderer(self._render)
         
@@ -347,7 +598,13 @@ class ao_visualization():
         self._edited_contour_widget.Initialize()
         self._edited_contour_widget.Off()
         self._edited_contour_widget.AddObserver(vtk.vtkCommand.DisableEvent, self._on_edited_contour)
+        self._edited_contour_widget.AddObserver(vtk.vtkCommand.InteractionEvent, self._on_interaction)
         
+        self._resize_box.hook(self)
+        self._resize_box.AddObserver(vtk.vtkCommand.InteractionEvent, self._on_resize_box)
+        
+        self._render.ResetCamera()
+
         iren.Initialize()
         iren.Start()
         
@@ -359,15 +616,21 @@ class ao_visualization():
         self._image_visibility = True
     #
     def _on_edited_contour(self, obj, event):
-        # print('_on_edited_contour:', obj, '->', event)
         if self.edit_idx is None or self.parent is None:
             return
+        self._resize_box.disable()
         o = self._image_data.GetOrigin()
         s = self._image_data.GetSpacing()
         polyData = obj.GetRepresentation().GetContourRepresentationAsPolyData()
         contour_pts = [[polyData.GetPoint(i)[0]/s[0]-o[0], polyData.GetPoint(i)[1]/s[1]-o[1]] \
             for i in range(polyData.GetNumberOfPoints())]
         self.parent.UpdateContour(self.edit_idx, contour_pts)
+    #
+    def _on_interaction(self, obj, event):
+        self._resize_box.disable()
+    #
+    def _on_resize_box(self, obj, _edited_pts):
+        self.enable_edited_contour(_edited_pts, reset_view=False)
     #
     def _draw_image(self):
         self._image_data = vtk.vtkImageData()
@@ -539,6 +802,9 @@ class ao_visualization():
         self._bkg_points.Initialize()
         self._bkg_cells.Initialize()
         self._bkg_poly.Modified()
+        
+        self._resize_box.Initialize()
+        self._resize_box.Modified()
     #
     def _change_camera_orientation(self):
         self._render.ResetCamera()
@@ -595,7 +861,14 @@ class ao_visualization():
         self._bkg_points.Modified()
         self._bkg_cells.Modified()
         self._bkg_poly.Modified()
-
+    #
+    @property
+    def origin(self):
+        return self._image_data.GetOrigin()
+    @property
+    def spacing(self):
+        return self._image_data.GetSpacing()
+    #
     def set_contours(self, contour_pts, edit_idx=None):
         if not self.edit_idx is None:
             self._edited_contour_widget.Off()
@@ -604,8 +877,8 @@ class ao_visualization():
         self._gray_points.Initialize()
         self._gray_lines.Initialize()
         self._annotated_points.Initialize()
-        img_origin = self._image_data.GetOrigin()
-        img_spacing = self._image_data.GetSpacing()
+        img_origin = self.origin
+        img_spacing = self.spacing
         
         gray_contours = []
 
@@ -614,7 +887,10 @@ class ao_visualization():
         for i, _pts in enumerate(contour_pts):
             pts = [(img_origin[0] + img_spacing[0] * pt[0], img_origin[1] + img_spacing[1] * pt[1]) for pt in _pts]
             x, y = contourCenter(pts)
-            self._contour_centers.append((x, y))
+            if not math.isnan(x) and not math.isnan(y):
+                self._contour_centers.append((x, y))
+            else:
+                continue
             if not edit_idx is None and edit_idx == i:
                 edited_pts = _pts
                 continue
@@ -649,6 +925,7 @@ class ao_visualization():
         self._annotated_points.Modified()
         self._annotated_poly.Modified()
         if not edited_pts is None:
+            self._resize_box.enable(edited_pts)
             self.enable_edited_contour(edited_pts)
             self._saved_contours = contour_pts
         elif not self.edit_idx is None:
@@ -696,7 +973,7 @@ class ao_visualization():
         self._voronoi_contour_poly.Modified()
         self.reset_view()
     #
-    def enable_edited_contour(self, pts):
+    def enable_edited_contour(self, pts, reset_view=True):
         o = self._image_data.GetOrigin()
         s = self._image_data.GetSpacing()
         
@@ -715,7 +992,8 @@ class ao_visualization():
         self._edited_contour_poly.Modified()
         self._edited_contour_widget.On()
         self._edited_contour_widget.Initialize(self._edited_contour_poly, 1)
-        self.reset_view()
+        if reset_view:
+            self.reset_view()
     def disable_edited_contour(self):
         self._edited_contour_points.Initialize()
         self._edited_contour_lines.Initialize()
@@ -891,10 +1169,34 @@ class ao_visualization():
         self._image_actor.GetProperty().SetColorWindow(cwin)
         self._vtk_widget.GetRenderWindow().Render()
     #
+    def validate_color_info(self):
+        p = self._image_actor.GetProperty()
+        clvl = p.GetColorLevel()
+        cwin = p.GetColorWindow()
+        dirty = False
+        if clvl > self._max_color_level:
+            clvl = self._max_color_level
+            dirty = True
+        elif clvl < self._min_color_level:
+            clvl = self._min_color_level
+            dirty = True
+        if cwin > self._max_color_window:
+            cwin = self._max_color_window
+            dirty = True
+        elif cwin < self._min_color_window:
+            cwin = self._min_color_window
+            dirty = True
+        if dirty:
+            p.SetColorLevel(clvl)
+            p.SetColorWindow(cwin)
+    #
     def get_image_dimensions(self):
         s = self._image_data.GetSpacing()
         d = self._image_data.GetDimensions()
         return (s[0]*d[0], s[1]*d[1], 1.)
+    #
+    def get_original_size(self):
+        return self._image_data.GetDimensions()
     #
     def updateVoronoiContours(self):
         _vor_contours = []

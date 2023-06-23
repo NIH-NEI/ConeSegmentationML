@@ -118,6 +118,17 @@ If a cell contour length is less than this value, then the result is discarded.
                 switch to a different mouse mode, or change display settings.</td>
             </tr>
             <tr>
+                <td><b>F3</b></td>
+                <td>Brightness/Contrast...</td>
+                <td><div>Show/hide Brightness/Contrast widget, which allows to change image brightness/contrast
+                in any mouse mode, not just &ldquo;Adjust&rdquo; mode, using sliders or clicking/dragging the
+                mouse inside the &ldquo;map&rdquo; rectangle. The &ldquo;[]&rdquo; button at the bottom left
+                resets brightness/contrast to the default settings.</div>
+                <div>This widget is also shown automatically when dragging the mouse over the image
+                in &ldquo;Adjust&rdquo; mode. In this case it is automatically hidden when swithing to
+                another mouse mode.</div></td>
+            </tr>
+            <tr>
                 <td><b>F5</b></td>
                 <td><img src="../Icons/settings.png" width=32 height=32 />&nbsp;Settings</td>
                 <td>Open a dialog to change display settings &mdash; visibility, colors and sizes of annotations
@@ -126,7 +137,7 @@ If a cell contour length is less than this value, then the result is discarded.
             </tr>
             <tr>
                 <td><b>F6</b></td>
-                <td><div>Annotation Sources...</td>
+                <td>Annotation Sources...</td>
                 <td>Open a dialog listing annotation sources (or origins). Starting with ver. 1.2 each annotation
                 is assigned a metadata object describing the source or origin of the annotation. For example,
                 annotations generated automatically will have name of the algorithm/method, creation date and
@@ -210,8 +221,8 @@ If a cell contour length is less than this value, then the result is discarded.
             </tr>
             <tr>
                 <td><b>Ctrl+M</b></td>
-                <td><img src="../Icons/mouse.png" width=32 height=32 />&nbsp;Default</td>
-                <td>Switch to &ldquo;Default&rdquo; mouse mode. In this mode:<br>
+                <td><img src="../Icons/mouse.png" width=32 height=32 />&nbsp;Adjust</td>
+                <td>Switch to &ldquo;Adjust&rdquo; mouse mode. In this mode:<br>
                 	&ndash; Mouse wheel (or <b>Ctrl</b>+right-dragging) zooms in and out;<br>
                 	&ndash; Dragging the mouse changes brightness/contrast;<br>
                 	&ndash; <b>Shift</b>+left-dragging (or middle-dragging) scrolls the image.<br>
@@ -237,6 +248,10 @@ If a cell contour length is less than this value, then the result is discarded.
                     Switch to &ldquo;Edit Cone Contours&rdquo; mouse mode. In this mode:<br>
                 	&ndash; Mouse wheel (or <b>Ctrl</b>+right-dragging) zooms in and out;<br>
                 	&ndash; Left click on a contour selects it for editing;<br>
+                	&ndash; In the beginning, a resize box is displayed around the edited contour &ndash;
+                	you can resize the whole contour by dragging the squares on edges and vertices. It
+                	disappears when you start editing individual points. To bring it back, just click
+                	inside the contour;<br>
                 	&ndash; When editing, you can edit the edges by left-dragging them;<br>
                 	&ndash; When editing, you can move the entire contour by middle-dragging it by an edge;<br>
                     &ndash; <b>Ctrl</b>+left click (Windows) or <b>Alt</b>+left click (Mac OS X)
@@ -252,6 +267,14 @@ If a cell contour length is less than this value, then the result is discarded.
                 	&ndash; Mouse wheel (or <b>Ctrl</b>+right dragging) zooms in and out;<br>
                 	&ndash; Left-dragging the mouse around an area erases all contours inside this area;<br>
                 	&ndash; <b>Shift</b>+left-dragging (or middle-dragging) scrolls the image.
+                </td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+T</b></td>
+                <td>Smooth&nbsp;Annotations</td>
+                <td>
+                	Toggle contour smoothing. If it is checked, a smoothing algorithm is automatically applied
+                	to added or edited contours.
                 </td>
             </tr>
             <tr>

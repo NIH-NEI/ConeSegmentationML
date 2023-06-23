@@ -1,13 +1,15 @@
 __all__ = ('BASE_DIR', 'ICONS_DIR', 'HELP_DIR', 'qt_icon', 'display_error', 'display_warning',
         'askYesNo', 'ao_progress_dialog', 'ao_open_dialog', 'ao_loc_dialog', 'ao_parameter_dialog',
-        'ao_source_window', )
+        'ao_source_window', 'ao_brightness_contrast', )
 
 import os
 import sys
 import time
 import datetime
+import math
 import traceback
 
+import numpy as np
 from PyQt5 import QtCore, QtWidgets, QtGui
 
 from AOMetaList import MetaRecord
@@ -906,6 +908,188 @@ select one of these files when prompted.'''
             self.custom = False
         self._mute = False
 #
+
+class _crossLabel(QtWidgets.QLabel):
+    def __init__(self, callback=None):
+        super(_crossLabel, self).__init__()
+        self.callback = callback
+        #
+        self.margin = 10
+        #
+        self.setStyleSheet(f'margin: {self.margin} {self.margin} {self.margin} {self.margin};')
+        self.setMouseTracking(True)
+        #
+        self.rangeX = (0, 1000)
+        self.rangeY = (0, 1000)
+        self.posX = 0
+        self.posY = 0
+        #
+        img_data = np.empty(shape=(256, 256), dtype=np.float32)
+        for c in range(256):
+            img_data[0][c] = c
+        row0 = img_data[0]
+        for j in range(1,256):
+            img_data[j] = row0 * ((255. - j * 0.85) / 255.) + (127.5 * j * 0.85 / 255.)
+        img_data = np.transpose(img_data, (1,0)).copy()
+        img = QtGui.QImage(img_data.astype(np.uint8), 256, 256, 256, QtGui.QImage.Format_Grayscale8)
+        self.pixmap0 = QtGui.QPixmap.fromImage(img)
+        self._updateScaledPixmap()
+        #
+    def _updateScaledPixmap(self):
+        self.scpixmap = self.pixmap0.scaled(self.width()-self.margin*2, self.height()-self.margin*2, transformMode=QtCore.Qt.FastTransformation)
+        self.setPixmap(self.scpixmap)
+        #self.update()
+    def resizeEvent(self, e):
+        self._updateScaledPixmap()
+    #
+    def _handle_mouse_pos(self, e):
+        pt = e.pos()
+        x0 = self.margin
+        x1 = self.width() - self.margin
+        w = x1 - x0
+        y0 = self.margin
+        y1 = self.height() - self.margin
+        h = y1 - y0
+        x = (pt.x() - x0) * (self.rangeX[1] - self.rangeX[0]) / w + self.rangeX[0]
+        y = (h - pt.y() + y0) * (self.rangeY[1] - self.rangeY[0]) / h + self.rangeY[0]
+        if x>=self.rangeX[0] and x<=self.rangeX[1] and y>=self.rangeY[0] and y<=self.rangeY[1]:
+            if self.callback:
+                self.callback(int(x+0.5), int(y+0.5))
+    #
+    def mousePressEvent(self, e):
+        if e.button() == QtCore.Qt.LeftButton:
+            self._handle_mouse_pos(e)
+    def mouseMoveEvent(self, e):
+        if e.buttons() == QtCore.Qt.LeftButton:
+            self._handle_mouse_pos(e)
+    #
+    def paintEvent(self, e):
+        super(_crossLabel, self).paintEvent(e)
+        qp = QtGui.QPainter()
+        qp.begin(self)
+        pen = QtGui.QPen(QtCore.Qt.yellow, 2, QtCore.Qt.CustomDashLine)
+        pen.setDashPattern([2, 4])
+        qp.setPen(pen)
+        #
+        x0 = self.margin
+        x1 = self.width() - self.margin
+        w = x1 - x0
+        y0 = self.margin
+        y1 = self.height() - self.margin
+        h = y1 - y0
+        x = (self.posX - self.rangeX[0]) * w / (self.rangeX[1] - self.rangeX[0]) + x0
+        qp.drawLine(x, y0, x, y1)
+        y = h - (self.posY - self.rangeY[0]) * h / (self.rangeY[1] - self.rangeY[0]) + y0
+        qp.drawLine(x0, y, x1, y)
+        #
+        qp.end()
+    #
+
+class ao_brightness_contrast(QtWidgets.QWidget):
+    def __init__(self, mainwin, parent=None, callback=None):
+        super(ao_brightness_contrast, self).__init__(parent)
+        self.mainwin = mainwin
+        self.callback = callback
+        #
+        self.manual = True
+        #
+        flags = self.windowFlags() | QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
+        self.setAutoFillBackground(True)
+        self.setBackgroundRole(QtGui.QPalette.Shadow)
+        #
+        geom = QtWidgets.QApplication.primaryScreen().geometry()
+        wsz = geom.height() * 20 // 100
+        self.resize(wsz, wsz)
+        self.move(30, 30)
+        #
+        view_layout = QtWidgets.QGridLayout()
+        view_layout.setHorizontalSpacing(2)
+        view_layout.setVerticalSpacing(2)
+        self.setLayout(view_layout)
+        #
+        for idx, stretch in enumerate((0., 1., 0.)):
+            view_layout.setColumnStretch(idx, stretch)
+            view_layout.setRowStretch(idx, stretch)
+        #
+        b_lab = QtWidgets.QLabel('\u263C')
+        b_lab.setFont(QtGui.QFont('Arial', 10))
+        view_layout.addWidget(b_lab, 0, 0)
+        c_lab = QtWidgets.QLabel(' \u25D1')
+        c_lab.setFont(QtGui.QFont('Arial', 16))
+        view_layout.addWidget(c_lab, 2, 2)
+        #
+        self.c_sl = sl = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        sl.setRange(0,1000)
+        sl.setTickInterval(100)
+        sl.setTickPosition(QtWidgets.QSlider.TicksAbove)
+        view_layout.addWidget(sl, 2, 1)
+        self.b_sl = sl = QtWidgets.QSlider(QtCore.Qt.Vertical)
+        sl.setRange(0,1000)
+        sl.setTickInterval(100)
+        sl.setTickPosition(QtWidgets.QSlider.TicksRight)
+        view_layout.addWidget(sl, 1, 0)
+        self.crosslabel = _crossLabel(callback=self.onCrossLabel)
+        view_layout.addWidget(self.crosslabel, 1, 1)
+        self.rbtn = QtWidgets.QPushButton('\u2A01')
+        self.rbtn.setStyleSheet('margin: 0; padding: 1 4 1 4;')
+        self.rbtn.setBackgroundRole(QtGui.QPalette.Dark)
+        view_layout.addWidget(self.rbtn, 2, 0)
+        #
+        self.c_sl.valueChanged.connect(self.onColorWindowSlider)
+        self.b_sl.valueChanged.connect(self.onColorLevelSlider)
+        self.rbtn.clicked.connect(lambda: self.onCrossLabel(500,500))
+        #
+        self._mute = False
+    #
+    def onColorWindowSlider(self, v):
+        self.crosslabel.posX = v
+        self.crosslabel.update()
+        if not self._mute and self.callback:
+            self.callback(self.color_info)
+    def onColorLevelSlider(self, v):
+        self.crosslabel.posY = v
+        self.crosslabel.update()
+        if not self._mute and self.callback:
+            self.callback(self.color_info)
+    #
+    def onCrossLabel(self, x, y):
+        mute = self._mute
+        self._mute = True
+        self.b_sl.setValue(y)
+        self.c_sl.setValue(x)
+        self._mute = mute
+        if not self._mute and self.callback:
+            self.callback(self.color_info)
+    #
+    @property
+    def color_info(self):
+        y = self.b_sl.value()
+        clvl = y * 767. / 1000. - 256. if y != 500 else 127.5
+        x = self.c_sl.value()
+        cwin = math.pow(x/125.1347,4.) + 0.1 if x != 500 else 255.
+        return (clvl, cwin)
+    @color_info.setter
+    def color_info(self, v):
+        try:
+            clvl, cwin = v
+            y = (clvl + 256.) * 1000. / 767.
+            if y<0: y=0
+            elif y>1000: y=1000
+            if cwin <= 0.1: x=0
+            else:
+                x = math.pow((cwin-0.1), 0.25)*125.1347
+                if x>1000: x=1000
+            x = int(x)
+            y = int(y)
+        except Exception as ex:
+            print(ex)
+            x = y = 500
+        self._mute = True
+        self.onCrossLabel(x, y)
+        self._mute = False
+    #
+
 
 class ao_source_window(QtWidgets.QWidget):
     def __init__(self, mainwin):

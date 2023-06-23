@@ -306,6 +306,7 @@ class MetaTracker(object):
                 yield flatcont
         #
         for delmkey, oids in self.delomap.items():
+            if not delmkey in metareg: continue
             delmid = metareg[delmkey]
             for oid in oids:
                 if not oid in self.gdead: continue

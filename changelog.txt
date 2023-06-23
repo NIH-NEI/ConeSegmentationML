@@ -1,3 +1,12 @@
+#### Version 1.2.3-beta (2022-06-23) ####
+- Added Brightness/Contrast widget, toggled by F3, to change brightness/contrast in any mouse mode and
+provide visual information about current settings.
+- Added "Resize" box around the edited contour, which allows to resize the contour as a whole.
+- Added "Smooth Annotation" option in the "Options" menu. When it is ON, a smoothing algorithm is
+automatically applied to added or edited contours, helping to deal with ragged contour edges.
+This can be switched on/off by pressing Ctrl+T.
+- Fixed bug with opening files containing inconsistent metadata.
+
 #### Version 1.2.2-beta (2022-05-01) ####
 - Added "Export Annotation Stats..." item to the "File" menu. It exports annotation tracker statistics (like
 who and when created/deleted/modified how many annotations).

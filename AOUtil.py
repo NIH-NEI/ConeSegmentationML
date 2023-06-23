@@ -1,10 +1,13 @@
-__all__ = ('UndoOp', 'UndoEntry', 'SegmentClipper', 'isPointInside', 'isIntersected', 'contourCenter',
-           'findContour', 'optimizeContour', 'contourChanged', 'datadir')
+__all__ = ('datadir', 'UndoOp', 'UndoEntry', 'SegmentClipper', 'isPointInside', 'isIntersected', 'contourCenter',
+           'findContour', 'optimizeContour', 'contourChanged', 'smoothContour',)
 
 import sys, os, datetime
 import enum
 from collections import namedtuple
 import math
+
+import numpy as np
+from scipy import interpolate
 
 # Decorator for functions accessing data via relative paths
 if hasattr(sys, '_MEIPASS'):
@@ -204,6 +207,9 @@ def optimizeContour(contour, min_dist=1.5):
         if cur_dist >= min_dist:
             res.append(pt2)
             pt1 = pt2
+    if len(res) < 5: return contour
+    if dist(res[0], res[-1]) < min_dist:
+        res.pop()
     return res
 
 # Test if a contour is sufficiently changed (after an edit operation)
@@ -216,4 +222,100 @@ def contourChanged(oldc, newc, tolerance=0.005):
         if math.fabs(pt1[1] - pt2[1]) > tolerance:
             return True
     return False
+
+# Parameterize contour on angle [(x, y), ...] -> [(x, y, a), ...]
+def _parameterizeContour(contour):
+    res = []
+    xc, yc = contourCenter(contour)
+    assert not math.isnan(xc)
+    assert not math.isnan(yc)
+    rad = 0.
+    for pt in contour:
+        x = pt[0]
+        y = pt[1]
+        dx = x - xc
+        dy = y - yc
+        a = math.atan2(dy, dx)
+        res.append((x, y, a))
+        rad += dx*dx + dy*dy
+    midr = []
+    for i in range(1,len(res)-2):
+        d1 = res[i][2] - res[i-1][2]
+        d2 = res[i+1][2] - res[i][2]
+        if (d1<0 and d2>0) or (d1>0 and d2<0) or (d1==0.):
+            continue
+        midr.append(res[i])
+    res[1:-1] = midr
+    if len(contour) > 0:
+        rad = math.sqrt(rad/len(contour))
+    res.sort(key=lambda x: x[2])
+    return res, rad, xc, yc
+        
+# Smooth contour using Smoothing Splines
+# https://docs.scipy.org/doc/scipy/tutorial/interpolate/smoothing_splines.html
+def smoothContour(contour, min_dist=1.5, factor=0.5, clip=None):
+    try:
+        pi2 = np.pi*2.
+        _pcont, rad, xc, yc = _parameterizeContour(contour)
+        pcont = [(x, y, a-pi2) for x,y,a in _pcont[-5:]] + _pcont + \
+            [(x, y, a+pi2) for x,y,a in _pcont[0:5]]
+        
+        xx = [p[0]-xc for p in pcont]
+        yy = [p[1]-yc for p in pcont]
+        t = [p[2] for p in pcont]
+        
+        npnew = int(4.*np.pi*rad)
+        tnew = [j*pi2/npnew - np.pi for j in range(npnew)]
+        
+        tck = interpolate.splrep(t, xx, s=1)
+        xx = interpolate.splev(tnew, tck, der=0)
+        tck = interpolate.splrep(t, yy, s=1)
+        yy = interpolate.splev(tnew, tck, der=0)
+        
+        _, rad1, dxc, dyc = _parameterizeContour([(x,y) for x,y in zip(xx,yy)])
+        xc += dxc
+        yc += dyc
+        xx = [x-dxc for x in xx]
+        yy = [y-dyc for y in yy]
+        
+        t = [a-pi2 for a in tnew[-10:]] + tnew + [a+pi2 for a in tnew[0:10]]
+        xx = xx[-10:] + xx + xx[0:10]
+        yy = yy[-10:] + yy + yy[0:10]
+        
+        tck = interpolate.splrep(t, xx, s=math.sqrt(npnew)*factor)
+        xnew = interpolate.splev(tnew, tck, der=0)
+        tck = interpolate.splrep(t, yy, s=math.sqrt(npnew)*factor)
+        ynew = interpolate.splev(tnew, tck, der=0)
+        
+        _cont = [(x,y) for x,y in zip(xnew,ynew)]
+        rsq = rad1*rad1*9.
+        pt0 = None
+        for pt1 in _cont:
+            x, y = pt1
+            assert x*x+y*y < rsq, 'distance to the center too big'
+            if not pt0 is None:
+                assert dist(pt0, pt1) < 9., f'distance between vertices too big {pt0} {pt1}'
+            pt0 = pt1
+        _, rad2, dxc, dyc = _parameterizeContour(_cont)
+        xc += 0.275
+        sc = (rad1 + 0.075) / rad2
+        
+        res = []
+        res.append((xnew[0]*sc + xc, ynew[0]*sc + yc))
+        for x, y in zip(xnew, ynew):
+            pt = (x*sc+xc, y*sc+yc)
+            cur_dist = dist(res[-1], pt)
+            if cur_dist >= min_dist:
+                res.append(pt)
+        if clip:
+            xmax = clip[0] - 1.001
+            ymax = clip[1] - 1.001
+            res = [(x, y) for x, y in res if x>0. and x<xmax and y>0. and y<ymax]
+            assert len(res) > 5
+        return res
+    except Exception as ex:
+        #print(ex)
+        return contour
+#
+
 

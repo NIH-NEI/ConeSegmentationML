@@ -155,6 +155,8 @@ class MainWindow(QtWidgets.QMainWindow):
             if 'realNameMap' in jobj:
                 for usern, realn in jobj['realNameMap'].items():
                     self.realNameMap[usern] = realn
+            if 'smooth' in jobj:
+                self.smooth = jobj['smooth']
         except Exception:
             pass
         usern = self.getUserName()
@@ -178,6 +180,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 'displaySettings': self._image_view.displaySettings,
                 'extended': self.extended,
                 'realNameMap': self.realNameMap,
+                'smooth': self.smooth,
             }
             if not ldir is None:
                 jobj['loadDir'] = ldir
@@ -231,6 +234,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._image_view.cancel_editing()
         self._image_view.visibility = True
         self._sync_display_controls()
+        if m != MouseOp.Normal:
+            if hasattr(self, 'bcwin') and not self.bcwin.manual:
+                self.bcwin.close()
+                del self.bcwin
+                self._mute = True
+                self.bc_act.setChecked(False)
+                self._mute = False
     #
     def _initialize_input_data(self):
         self._image_view.abort_editing()
@@ -375,6 +385,11 @@ class MainWindow(QtWidgets.QMainWindow):
                     statusTip='Show data locations of the current image file',
                     triggered=self._show_data_locations)
 
+        self.bc_act = QtWidgets.QAction('Brightness/Contrast...', shortcut='F3',
+                statusTip='Toggle Brightness/Contrast Window (F3)',
+                checkable=True, checked=False,
+                triggered=self._toggle_brightness_contrast)
+        
         self.disp_act = QtWidgets.QAction('Display Settings...', iconText='Settings', shortcut='F5',
                 icon=qt_icon('settings'), toolTip='Change Display Settings (F5)',
                 triggered=self._show_display_settings)
@@ -388,6 +403,7 @@ class MainWindow(QtWidgets.QMainWindow):
         view_menu.addAction(self.voronoi_act)
         view_menu.addAction(self.toggle_interpolation)
         view_menu.addSeparator()
+        view_menu.addAction(self.bc_act)
         view_menu.addAction(self.disp_act)
         view_menu.addAction(self.meta_act)
         view_menu.addSeparator()
@@ -407,6 +423,12 @@ class MainWindow(QtWidgets.QMainWindow):
         view_menu.addSeparator()
         view_menu.addAction(self.data_loc_act)
         view_menu.addAction(self.reset_brightness_contrast)
+        
+        opt_menu = self.menuBar().addMenu("&Options")
+        self.smooth_act = QtWidgets.QAction('Smooth Annotations', shortcut='Ctrl+T',
+                statusTip='Apply Smmothing Splines to manually added or edited annotations (Ctrl+T)',
+                checkable=True, checked=False)
+        opt_menu.addAction(self.smooth_act)
 
         self.about_act = QtWidgets.QAction('About', self,
                     icon=qt_icon('about'),
@@ -538,6 +560,13 @@ class MainWindow(QtWidgets.QMainWindow):
         helpWindow.showNormal()
     #
     @property
+    def smooth(self):
+        return self.smooth_act.isChecked()
+    @smooth.setter
+    def smooth(self, st):
+        self.smooth_act.setChecked(st)
+    #
+    @property
     def extended(self):
         return self.experimental_act.isChecked()
     @extended.setter
@@ -627,6 +656,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if len(img_filenames) is not 0:
             self._initialize_input_data()
             self._image_view.reset_color()
+            if hasattr(self, 'bcwin'):
+                self.bcwin.color_info = self._image_view.color_info
             metainit()
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
             self._progress_dlg.setWindowTitle('Open Images')
@@ -785,6 +816,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._image_view.visibility = True
         self._sync_display_controls()
         self._image_view.reset_view(True)
+        if hasattr(self, 'bcwin'):
+            self.bcwin.color_info = self._image_view.color_info
 
     def _segment_cone_cells(self):
         #res = AOSettingsDialog.display_warning('Detecting cone cells', 'Do you really want to detect cells?')
@@ -905,6 +938,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 modified = True
             elif e.op == UndoOp.Image:
                 self._image_view.color_info = e.data
+                if hasattr(self, 'bcwin'):
+                    self.bcwin.color_info = e.data
             if e.last: break
         if modified:
             self._set_contours(self._cur_img_id)
@@ -916,7 +951,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.undo_act.setEnabled(True)
     #
     def push_color_undo(self, ci):
-        self._undo_buf.append(UndoEntry(UndoOp.Image, True, ci))
+        if len(self._undo_buf) == 0 or self._undo_buf[-1].op != UndoOp.Image:
+            self._undo_buf.append(UndoEntry(UndoOp.Image, True, ci))
         self.undo_act.setEnabled(True)
     #
     def clear_undo(self):
@@ -933,6 +969,8 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         contours = self._input_data['contours'][self._cur_img_id]
         c = optimizeContour(contour_pts)
+        if self.smooth:
+            c = smoothContour(c, clip=self._image_view.get_original_size())
         if len(c) < 3:
             return
         self.push_undo(UndoOp.Added, c)
@@ -997,7 +1035,14 @@ class MainWindow(QtWidgets.QMainWindow):
         if idx < 0:
             idx = None
         else:
-            contours[idx][:] = optimizeContour(contours[idx])
+            contour = optimizeContour(contours[idx])
+            contours[idx][:] = contour
+            if self.smooth:
+                sm_contour = smoothContour(contour, clip=self._image_view.get_original_size())
+                if contourChanged(sm_contour, contour):
+                    self.push_undo(UndoOp.Added, sm_contour)
+                    self.push_undo(UndoOp.Removed, contours[idx], False)
+                    contours[idx] = sm_contour
         self._set_contours(self._cur_img_id, idx)
     #
     def UpdateContour(self, idx, contour_pts):
@@ -1011,6 +1056,8 @@ class MainWindow(QtWidgets.QMainWindow):
             if contours.meta.objmeta(contours[idx]).metakey != contours.meta.default.metakey:
                 meta_changed = True
         if meta_changed or contourChanged(contours[idx], contour_pts):
+            if self.smooth:
+                contour_pts = smoothContour(contour_pts, clip=self._image_view.get_original_size())
             self.push_undo(UndoOp.Added, contour_pts)
             self.push_undo(UndoOp.Removed, contours[idx], False)
             contours[idx] = contour_pts
@@ -1070,6 +1117,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _reset_brightness_contrast(self):
         self.resetSources()
         self._image_view.reset_color()
+        if hasattr(self, 'bcwin'):
+            self.bcwin.color_info = self._image_view.color_info
         if self._cur_img_id >= 0:
             self._input_data['colors'][self._cur_img_id] = self._image_view.color_info
         self._image_view.reset_view(True)
@@ -1138,6 +1187,33 @@ class MainWindow(QtWidgets.QMainWindow):
         self.srcwin.setMetaList(contours)
         self.srcwin.show()
         self.srcwin.activateWindow()
+    #
+    def onBCci(self, ci):
+        self.push_color_undo(self._image_view.color_info)
+        self._image_view.color_info = ci
+    def onIWci(self, ci):
+        if not hasattr(self, 'bcwin'):
+            self.bcwin = ao_brightness_contrast(self, parent=self.vtkWinWidget, callback=self.onBCci)
+            self.bcwin.color_info = self._image_view.color_info
+            self.bcwin.manual = False
+            self._mute = True
+            self.bc_act.setChecked(True)
+            self._mute = False
+        else:
+            self.bcwin.color_info = ci
+        self.bcwin.show()
+    def _toggle_brightness_contrast(self):
+        if self._mute: return
+        if self.bc_act.isChecked():
+            if not hasattr(self, 'bcwin'):
+                self.bcwin = ao_brightness_contrast(self, parent=self.vtkWinWidget, callback=self.onBCci)
+            self.bcwin.color_info = self._image_view.color_info
+            self.bcwin.show()
+            self.bcwin.activateWindow()
+        else:
+            if hasattr(self, 'bcwin'):
+                self.bcwin.close()
+                del self.bcwin
     #
     def _save_stats(self):
         if len(self._input_data['images']) == 0: return
