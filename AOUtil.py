@@ -1,5 +1,5 @@
 __all__ = ('datadir', 'UndoOp', 'UndoEntry', 'SegmentClipper', 'isPointInside', 'isIntersected', 'contourCenter',
-           'findContour', 'optimizeContour', 'contourChanged', 'smoothContour',)
+           'findContour', 'optimizeContour', 'contourChanged', 'smoothContour', 'isTooSmall',)
 
 import sys, os, datetime
 import enum
@@ -317,5 +317,20 @@ def smoothContour(contour, min_dist=1.5, factor=0.5, clip=None):
         #print(ex)
         return contour
 #
-
+def isTooSmall(contour, minsize=4.):
+    if len(contour) < 5: return True
+    xmin = xmax = ymin = ymax = None
+    for pt in contour:
+        x = pt[0]
+        y = pt[1]
+        if xmin is None:
+            xmin = xmax = x
+            ymin = ymax = y
+            continue
+        if xmin > x: xmin = x
+        if xmax < x: xmax = x
+        if ymin > y: ymin = y
+        if ymax < y: ymax = y
+    return xmax-xmin < minsize and ymax-ymin < minsize
+#
 

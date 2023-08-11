@@ -1,4 +1,4 @@
-__all__ = ('BASE_DIR', 'ICONS_DIR', 'HELP_DIR', 'qt_icon', 'display_error', 'display_warning',
+__all__ = ('BASE_DIR', 'ICONS_DIR', 'HELP_DIR', 'qt_icon', 'qt_cursor', 'display_error', 'display_warning',
         'askYesNo', 'ao_progress_dialog', 'ao_open_dialog', 'ao_loc_dialog', 'ao_parameter_dialog',
         'ao_source_window', 'ao_brightness_contrast', )
 
@@ -25,6 +25,9 @@ MODEL_WEIGHTS_DIR = os.path.join(BASE_DIR, 'model_weights')
 
 def qt_icon(name):
     return QtGui.QIcon(os.path.join(ICONS_DIR, name))
+
+def qt_cursor(name):
+    return QtGui.QCursor(QtGui.QPixmap(os.path.join(ICONS_DIR, name)))
 
 def display_error(err, ex):
     msg = QtWidgets.QMessageBox()
@@ -167,13 +170,13 @@ class ao_open_dialog(QtWidgets.QDialog):
         self.imageTable = QtWidgets.QTableWidget(0, 3)
         self.imageTable.setColumnWidth(0, 8)
         self.imageTable.setColumnWidth(1, self.gw * 30 // 100)
-        self.imageTable.setHorizontalHeaderLabels([u'\u221A', u'Image File', u'Annotations File']);
+        self.imageTable.setHorizontalHeaderLabels([u'\u221A', u'Image File', u'Annotations File'])
         self.imageTable.horizontalHeader().setStretchLastSection(True)
         self.imageTable.verticalHeader().setVisible(False)
-        self.imageTable.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers);
-        self.imageTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows);
-        self.imageTable.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection);
-        self.imageTable.setShowGrid(False);
+        self.imageTable.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.imageTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.imageTable.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.imageTable.setShowGrid(False)
         self.imageTable.horizontalHeader().sectionClicked.connect(self.OnHeaderClicked)
 
         view_layout.addWidget(self.imageTable, 3, 0, 1, 3)
@@ -1039,6 +1042,8 @@ class ao_brightness_contrast(QtWidgets.QWidget):
         self.c_sl.valueChanged.connect(self.onColorWindowSlider)
         self.b_sl.valueChanged.connect(self.onColorLevelSlider)
         self.rbtn.clicked.connect(lambda: self.onCrossLabel(500,500))
+        #
+        self.setMaximumSize(self.size())
         #
         self._mute = False
     #

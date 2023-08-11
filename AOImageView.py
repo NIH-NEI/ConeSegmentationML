@@ -11,6 +11,7 @@ import math
 import SimpleITK as sitk
 from scipy.spatial import Voronoi
 from AOUtil import SegmentClipper, contourCenter
+from AOSettingsDialog import qt_cursor
 #from AOFileIO import write_points
 
 # Patch for QVTKRenderWindowInteractor crashing on some key events, such as Shift+;
@@ -319,7 +320,15 @@ class ao_resize_box():
                QtCore.Qt.SizeHorCursor,
                QtCore.Qt.SizeFDiagCursor, QtCore.Qt.SizeVerCursor, QtCore.Qt.SizeBDiagCursor,
                QtCore.Qt.SizeHorCursor,]
+    _first_time = True
     def __init__(self):
+        if ao_resize_box._first_time:
+            ao_resize_box._first_time = False
+            for fn in ('rot_tl.png', 'rot_t.png', 'rot_tr.png',
+                       'rot_r.png',
+                       'rot_br.png', 'rot_b.png', 'rot_bl.png',
+                       'rot_l.png'):
+                ao_resize_box.CURSORS.append(qt_cursor(fn))
         self._box_pts = []
         self._box_polys = []
         #
@@ -428,14 +437,33 @@ class ao_resize_box():
             if ymax < ymin + 2.*s[1]: ymax = ymin + 2.*s[1]
             yc = ymin
             yscale = (ymax - yc) / (ymax0 - yc)
-        self._update_box(xmin, ymin, xmax, ymax)
-        self.edited_pts = []
+        #
         _edited_pts = []
-        for pt in self._save_edited_pts:
-            x = (pt[0] - xc) * xscale + xc
-            y = (pt[1] - yc) * yscale + yc
-            self.edited_pts.append([x, y])
-            _edited_pts.append([x/s[0] - o[0], y/s[1] - o[1]])
+        #
+        if self._vidx >=9 and self._vidx <= 16:
+            xmid = self._save_box_pts[1][0]
+            ymid = self._save_box_pts[3][1]
+            an0 = math.atan2(self._save_pos[1]-ymid,self._save_pos[0]-xmid)
+            an1 = math.atan2(self._last_pos[1]-ymid,self._last_pos[0]-xmid)
+            theta = an1-an0
+            sint = math.sin(theta)
+            cost = math.cos(theta)
+            #
+            for pt in self._save_edited_pts:
+                x = pt[0] - xmid
+                y = pt[1] - ymid
+                x1 = x*cost - y*sint + xmid
+                y1 = x*sint + y*cost + ymid
+                _edited_pts.append([x1/s[0] - o[0], y1/s[1] - o[1]])
+            self.enable(_edited_pts)
+        else:
+            self._update_box(xmin, ymin, xmax, ymax)
+            self.edited_pts = []
+            for pt in self._save_edited_pts:
+                x = (pt[0] - xc) * xscale + xc
+                y = (pt[1] - yc) * yscale + yc
+                self.edited_pts.append([x, y])
+                _edited_pts.append([x/s[0] - o[0], y/s[1] - o[1]])
         for obs in self.observers:
             obs(self, _edited_pts)
         self.vis.reset_view()
@@ -536,6 +564,17 @@ class ao_resize_box():
                 self._box_points.InsertNextPoint(pt[0], pt[1], -0.01)
                 self._box_lines.InsertCellPoint(id+start_index)
             self._box_lines.InsertCellPoint(start_index)
+        #
+        dx = s[0]*3.
+        dy = s[1]*3.
+        self._box_polys.append([ [xmin-dx, ymin-dy], [xmin, ymin-dy], [xmin, ymin], [xmin-dx, ymin] ])
+        self._box_polys.append([ [xmid-dx, ymin-dy], [xmid+dx, ymin-dy], [xmid+dx, ymin], [xmid-dx, ymin] ])
+        self._box_polys.append([ [xmax, ymin-dy], [xmax+dx, ymin-dy], [xmax+dx, ymin], [xmax, ymin] ])
+        self._box_polys.append([ [xmax, ymid-dy], [xmax+dx, ymid-dy], [xmax+dx, ymid+dy], [xmax, ymid-dy] ])
+        self._box_polys.append([ [xmax, ymax], [xmax+dx, ymax], [xmax+dx, ymax+dy], [xmax, ymax-dy] ])
+        self._box_polys.append([ [xmid-dx, ymax], [xmid+dx, ymax], [xmid+dx, ymax+dy], [xmid-dx, ymax+dy] ])
+        self._box_polys.append([ [xmin-dx, ymax], [xmin, ymax], [xmin, ymax+dy], [xmin-dx, ymax+dy] ])
+        self._box_polys.append([ [xmin-dx, ymid-dy], [xmin, ymid-dy], [xmin, ymid+dy], [xmin-dx, ymid-dy] ])
         #
         self.Modified()
     #

@@ -1,6 +1,7 @@
 import os, sys
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from AOHotKey import key_to_str
 
 class AoColorButton(QtWidgets.QPushButton):
     def __init__(self, onchange=None):
@@ -50,15 +51,23 @@ class AoColorButton(QtWidgets.QPushButton):
                 self.onchange(self.color)
         #
 
-class ao_display_settings(QtWidgets.QDialog):
+#
+class ao_display_settings(QtWidgets.QWidget):
     changed = QtCore.pyqtSignal([dict])
+    smoothChanged = QtCore.pyqtSignal([int])
     def __init__(self, parent=None, contour_settings=True):
-        super(ao_display_settings, self).__init__(parent)
+        super(ao_display_settings, self).__init__(None)
         self.contour_settings = contour_settings
-        self.setWindowFlags(self.windowFlags() & ~QtCore.Qt.WindowContextHelpButtonHint)
-        self.setSizeGripEnabled(False)
+        
+        flags = self.windowFlags() | QtCore.Qt.WindowStaysOnTopHint
+        flags &= ~QtCore.Qt.WindowContextHelpButtonHint
+        self.setWindowFlags(flags)
+        self.setAutoFillBackground(True)
+        
+        #self.setSizeGripEnabled(False)
         self.setWindowTitle('Display Settings')
         #
+        self._smoothHotKey = ''
         self._mute = True
         #
         view_layout = QtWidgets.QGridLayout()
@@ -152,9 +161,15 @@ class ao_display_settings(QtWidgets.QDialog):
         self.btBkgColor.color = '#000000'
         imageLayout.addWidget(self.btBkgColor, 0, 3)
         #
+        optLayout = QtWidgets.QGridLayout()
+        view_layout.addLayout(optLayout, 2, 0, 1, 3)
+        self.cbSmooth = QtWidgets.QCheckBox(f'Smooth New and Edited Annotations [{self._smoothHotKey}]',
+                stateChanged=lambda x: self.handleSmooth())
+        optLayout.addWidget(self.cbSmooth, 0, 0)
+        #
         btnLayout = QtWidgets.QGridLayout()
         btnLayout.setHorizontalSpacing(100)
-        view_layout.addLayout(btnLayout, 2, 1, 1, 2)
+        view_layout.addLayout(btnLayout, 3, 1, 1, 2)
         self.btnDef = QtWidgets.QPushButton('Restore Defaults')
         btnLayout.addWidget(self.btnDef, 0, 0)
         self.btnOk = QtWidgets.QPushButton('  OK  ')
@@ -165,7 +180,44 @@ class ao_display_settings(QtWidgets.QDialog):
         #
         self.displaySettings = None
         self._mute = False
-        #self.setFixedSize(self.size())
+    #
+    def showEvent(self, evt):
+        super(ao_display_settings, self).showEvent(evt)
+        self.setFixedSize(self.size())
+    #
+    def closeEvent(self, evt):
+        #super(ao_display_settings, self).closeEvent(evt)
+        self.hide()
+    #
+    def keyPressEvent(self, e):
+        if key_to_str(e) == self._smoothHotKey:
+            self.smoothAnnotations = not self.smoothAnnotations
+            self.smoothChanged.emit(1 if self.smoothAnnotations else 0)
+    #
+    @property
+    def smoothHotKey(self):
+        return self._smoothHotKey
+    @smoothHotKey.setter
+    def smoothHotKey(self, v):
+        self._smoothHotKey = v
+        txt = self.cbSmooth.text().split('[')[0].strip()
+        if self._smoothHotKey:
+            txt = f'{txt} [{self._smoothHotKey}]'
+        self.cbSmooth.setText(txt)
+    #
+    @property
+    def smoothAnnotations(self):
+        return self.cbSmooth.isChecked()
+    @smoothAnnotations.setter
+    def smoothAnnotations(self, st):
+        mute = self._mute
+        self._mute = True
+        self.cbSmooth.setChecked(st)
+        self._mute = mute
+    #
+    def handleSmooth(self):
+        if not self._mute:
+            self.smoothChanged.emit(1 if self.smoothAnnotations else 0)
     #
     def handleChange(self):
         if not self._mute:
@@ -174,6 +226,8 @@ class ao_display_settings(QtWidgets.QDialog):
     def loadDefaults(self):
         self.displaySettings = None
         self.changed.emit(self.displaySettings)
+        self.smoothAnnotations = False
+        self.smoothChanged.emit(1 if self.smoothAnnotations else 0)
     #
     @property
     def displaySettings(self):

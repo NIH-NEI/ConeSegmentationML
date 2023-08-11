@@ -1,3 +1,14 @@
+#### Version 1.2.4-beta (2022-08-11) ####
+- Added "Rotate" control to the "Resize box" around the edited contour, it allows to rotate
+the whole annotation around its center.
+- Added "Cusomize Keyboard Shortcuts" dialog, which allows to re-assign keyboard shortcuts for menu and
+toolbar actions. The dialog opens via menu "Options" -> "Cusomize Keyboard Shortcuts...".
+- The "Display Settings" dialog converted to a non-modal always-on-top window, which allows to work with
+the main UI without closing the box.
+- The "Smooth Annotations" option is duplicated in the "Display Settings" box.
+- A warning is displayed when manually adding an annotation, which is too small, with an option to cancel
+the operation.
+
 #### Version 1.2.3-beta (2022-06-23) ####
 - Added Brightness/Contrast widget, toggled by F3, to change brightness/contrast in any mouse mode and
 provide visual information about current settings.

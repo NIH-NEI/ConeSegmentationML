@@ -20,6 +20,7 @@ from AOMetaList import *
 from AOSettingsDialog import *
 from AODisplay import ao_display_settings
 from AOSnap import ao_snap_dialog
+from AOHotKey import ao_hotkey_dialog
 import AOConfig as cfg
 
 _big_icon = QtCore.QUrl.fromLocalFile(os.path.join(ICONS_DIR, 'ConeSegmentationML256.png'))
@@ -82,11 +83,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.saveDir = QtCore.QDir.home()
         self.realNameMap = {}
 
-        # State dir/file
+        # State dir/files
         self.state_dir = os.path.join(os.path.expanduser('~'), '.ConeSegmentationML')
         if not os.path.exists(self.state_dir):
             os.mkdir(self.state_dir)
         self.state_file = os.path.join(self.state_dir, 'state.json')
+        self.shortcuts_file = os.path.join(self.state_dir, 'shortcuts.json')
         
         #create backup directory
         self.hist = cfg.HistoryManager(self.state_dir, suffix='_contours.csv', retention_days=365)
@@ -117,7 +119,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._segmentation_para_dlg = ao_parameter_dialog(self)
         self._segmentation_para_dlg.setMinimumSize(geom.width()*24//100, geom.height()//4)
         self._display_settings_dlg = ao_display_settings(self)
+        self._display_settings_dlg.smoothHotKey = self.smooth_act.shortcut().toString()
         self._display_settings_dlg.changed.connect(self._on_display_settings)
+        self._display_settings_dlg.smoothChanged.connect(self._on_smooth_changed)
         self._progress_dlg = ao_progress_dialog(self)
         self._progress_dlg.setMinimumWidth(geom.width()/5)
         self._file_io = AOFileIO.ao_fileIO()
@@ -128,8 +132,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._data_loc_dlg = ao_loc_dialog(self)
         self._data_loc_dlg.setMinimumWidth(geom.width()/2)
         #
+        self._action_map = self.actionMap()
+        self._default_key_map = self.hotkeys
+        #
         self.status('Press F1 for help.')
         self.loadState()
+        self.loadShortcuts()
         self.setAcceptDrops(True)
         self._mute = False
     #
@@ -138,6 +146,39 @@ class MainWindow(QtWidgets.QMainWindow):
             self.mposText.setText(msg)
         else:
             self._status_bar.showMessage(msg)
+    #
+    def actionMap(self):
+        actmap = {}
+        for onm in dir(self):
+            if not hasattr(self, onm) or onm.startswith('__') or onm.startswith('_h_'): continue
+            act = getattr(self, onm)
+            if not isinstance(act, QtWidgets.QAction): continue
+            ks = act.shortcut().toString()
+            if ks:
+                actmap[act.text()] = act
+        return actmap
+    #
+    @property
+    def hotkeys(self):
+        res = {}
+        for act_name, act in self._action_map.items():
+            res[act_name] = act.shortcut().toString()
+        return res
+    @hotkeys.setter
+    def hotkeys(self, key_map):
+        for act_name, act in self._action_map.items():
+            keystr = key_map.get(act_name, '')
+            descr = act.statusTip() or act.toolTip()
+            if not descr:
+                descr = ''
+            else:
+                descr = descr.split('[')[0].strip()
+            act.setShortcut(QtGui.QKeySequence(keystr))
+            if descr and keystr:
+                descr = f'{descr} [{keystr}]'
+                act.setStatusTip(descr)
+                act.setToolTip(descr)
+        self._display_settings_dlg.smoothHotKey = self.smooth_act.shortcut().toString()
     #
     def loadState(self):
         try:
@@ -157,6 +198,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.realNameMap[usern] = realn
             if 'smooth' in jobj:
                 self.smooth = jobj['smooth']
+                self._on_smooth_act()
         except Exception:
             pass
         usern = self.getUserName()
@@ -191,6 +233,19 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             pass
     #
+    def loadShortcuts(self):
+        try:
+            with open(self.shortcuts_file, 'r') as fi:
+                self.hotkeys = json.load(fi)
+        except Exception:
+            pass
+    def saveShortcuts(self):
+        try:
+            with open(self.shortcuts_file, 'w') as fo:
+                json.dump(self.hotkeys, fo, indent=2)
+        except Exception:
+            pass
+    #
     def getUserName(self):
         return os.getenv('USERNAME', '=Anonymous=')
     def getRealName(self, usern=None):
@@ -222,7 +277,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._open_contour_list(csv_filenames, strict)
     #
     def closeEvent(self, e):
-        for winname in ('helpwindow', 'srcwin'):
+        for winname in ('helpwindow', 'srcwin', '_display_settings_dlg'):
             if hasattr(self, winname):
                 getattr(self, winname).close()
         self._image_view.cancel_editing()
@@ -326,7 +381,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _setup_menu(self):
         self.open_image_act = QtWidgets.QAction('Open...', self, shortcut=QtGui.QKeySequence.Open,
                     icon=qt_icon('open'),
-                    toolTip='Open image(s) and (optionally) segmentation results (contours-annotations)',
+                    toolTip='Open images and, optionally, segmentation results (contours-annotations)',
                     triggered=self._open_images)
 
         self.save_data_act = QtWidgets.QAction('Save...', self, shortcut=QtGui.QKeySequence.Save,
@@ -341,7 +396,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.delete_all_act = QtWidgets.QAction('Delete Annotations', self,
                                       statusTip='Delete all annotations on current image', triggered=self._delete_all)
 
-        quit = QtWidgets.QAction('Exit', self, shortcut=QtGui.QKeySequence.Quit,
+        self.quit_act = QtWidgets.QAction('Exit', self, shortcut=QtGui.QKeySequence.Quit,
                      toolTip="Quit the application", triggered=self._quit)
         
         self.experimental_act = QtWidgets.QAction('Multiple Levelset Iterations', self,
@@ -358,44 +413,44 @@ class MainWindow(QtWidgets.QMainWindow):
         advMenu = file_menu.addMenu('Advanced Options')
         advMenu.addAction(self.experimental_act)
         file_menu.addSeparator()
-        file_menu.addAction(quit)
+        file_menu.addAction(self.quit_act)
 
         self.toggle_visibility = QtWidgets.QAction('Annotation Visibility', self, shortcut='F2',
                     iconText='Show', icon=qt_icon('fovea'),
                     checkable=True, checked=True,
-                    statusTip='Show/Hide all annotations (F2)',
-                    toolTip='Show/Hide all annotations (F2)',
+                    statusTip='Show/Hide all annotations [F2]',
+                    toolTip='Show/Hide all annotations [F2]',
                     triggered=self._toggle_visibility)
 
         self.voronoi_act = QtWidgets.QAction('Voronoi', shortcut='Ctrl+V',
-                icon=qt_icon('Voronoi'), statusTip='Toggle Voronoi Diagram display (Ctrl+V)',
+                icon=qt_icon('Voronoi'), statusTip='Toggle Voronoi Diagram display [Ctrl+V]',
                 checkable=True, checked=False,
                 triggered=self._toggle_voronoi)
 
         self.toggle_interpolation = QtWidgets.QAction('Image Interpolation', self, shortcut='Ctrl+I',
                     checkable=True, checked=True,
-                    statusTip='Toggle Image Scale Pixel Interpolation (Ctrl+I)',
+                    statusTip='Toggle Image Scale Pixel Interpolation [Ctrl+I]',
                     triggered=self._toggle_interpolation)
 
         self.reset_brightness_contrast = QtWidgets.QAction('Reset Image View', self, shortcut='F10',
-                    statusTip='Reset Image View to the original size, position, brightness/contrast, etc.',
+                    statusTip='Reset Image View to the original size, position, brightness/contrast, etc. [F10]',
                     triggered=self._reset_brightness_contrast)
 
         self.data_loc_act = QtWidgets.QAction('Show data file locations', self, shortcut='Ctrl+L',
-                    statusTip='Show data locations of the current image file',
+                    statusTip='Show data locations of the current image file [Ctrl+L]',
                     triggered=self._show_data_locations)
 
         self.bc_act = QtWidgets.QAction('Brightness/Contrast...', shortcut='F3',
-                statusTip='Toggle Brightness/Contrast Window (F3)',
+                statusTip='Toggle Brightness/Contrast Window [F3]',
                 checkable=True, checked=False,
                 triggered=self._toggle_brightness_contrast)
         
         self.disp_act = QtWidgets.QAction('Display Settings...', iconText='Settings', shortcut='F5',
-                icon=qt_icon('settings'), toolTip='Change Display Settings (F5)',
+                icon=qt_icon('settings'), toolTip='Change Display Settings [F5]',
                 triggered=self._show_display_settings)
         
         self.meta_act = QtWidgets.QAction('Annotation Sources...', shortcut='F6',
-                toolTip='Highlight select annotation sources (F6)',
+                toolTip='Highlight select annotation sources [F6]',
                 triggered=self._select_annotation_sources)
 
         view_menu = self.menuBar().addMenu("&View")
@@ -409,14 +464,14 @@ class MainWindow(QtWidgets.QMainWindow):
         view_menu.addSeparator()
         self.snap_annotated_act = QtWidgets.QAction('Snapshot...', self, shortcut='F7',
                     icon=qt_icon('camera'),
-                    statusTip='Take a snapshot of the current image with annotations (F7)',
-                    toolTip='Take a snapshot of the current image with annotations (F7)',
+                    statusTip='Take a snapshot of the current image with annotations [F7]',
+                    toolTip='Take a snapshot of the current image with annotations [F7]',
                     triggered=self._snap_annotated)
         view_menu.addAction(self.snap_annotated_act)
 
         self.screen_act = QtWidgets.QAction('Screenshot', self, shortcut='Ctrl+F7',
-                    statusTip='Copy screenshot to clipboard (Ctrl+F7)',
-                    toolTip='Copy screenshot to clipboard (Ctrl+F7)',
+                    statusTip='Copy screenshot to clipboard [Ctrl+F7]',
+                    toolTip='Copy screenshot to clipboard [Ctrl+F7]',
                     triggered=self._screen)
         view_menu.addAction(self.screen_act)
 
@@ -426,17 +481,23 @@ class MainWindow(QtWidgets.QMainWindow):
         
         opt_menu = self.menuBar().addMenu("&Options")
         self.smooth_act = QtWidgets.QAction('Smooth Annotations', shortcut='Ctrl+T',
-                statusTip='Apply Smmothing Splines to manually added or edited annotations (Ctrl+T)',
-                checkable=True, checked=False)
+                toolTip='Apply Smmothing Splines to manually added or edited annotations [Ctrl+T]',
+                statusTip='Apply Smmothing Splines to manually added or edited annotations [Ctrl+T]',
+                checkable=True, checked=False, triggered=self._on_smooth_act)
         opt_menu.addAction(self.smooth_act)
+
+        self.hotkey_act = QtWidgets.QAction('Customize Keyboard Shortcuts...',
+                statusTip='Select user-defined keyboard shortcuts for common actions',
+                triggered=self._on_hotkey_act)
+        opt_menu.addAction(self.hotkey_act)
 
         self.about_act = QtWidgets.QAction('About', self,
                     icon=qt_icon('about'),
                     triggered=self._display_about)
-        self.help_act = QtWidgets.QAction('Keyboard Shortcuts...', self, shortcut='F1',
+        self.help_act = QtWidgets.QAction('Help on controls...', self, shortcut='F1',
                     icon=qt_icon('help'),
-                    toolTip='Display list of keyboard shortcuts',
-                    statusTip='Display list of keyboard shortcuts',
+                    toolTip='Display help on keyboard and mouse controls [F1]',
+                    statusTip='Display help on keyboard and mouse controls [F1]',
                     triggered=self._display_help)
         
         help_menu = self.menuBar().addMenu("&Help")
@@ -444,9 +505,9 @@ class MainWindow(QtWidgets.QMainWindow):
         help_menu.addAction(self.help_act)
 
         # Invisible actions, just to make Up/Down arrows scroll through image list
-        self._next_image_act = QtWidgets.QAction('NextImage', self,
+        self._h_next_image_act = QtWidgets.QAction('NextImage', self,
                     shortcut='Down', triggered=self.next_image)
-        self._prev_image_act = QtWidgets.QAction('PreviousImage', self,
+        self._h_prev_image_act = QtWidgets.QAction('PreviousImage', self,
                     shortcut='Up', triggered=self.previous_image)
     #
     def _screen(self):
@@ -482,35 +543,35 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Mouse Op button group
         mouse_group = QtWidgets.QActionGroup(self)
-        default_act = QtWidgets.QAction('Adjust', mouse_group, shortcut='Ctrl+M',
-                icon=qt_icon('mouse'), toolTip='Default Mouse Mode - adjust brightness/contrast (Ctrl+M)',
+        self.default_act = QtWidgets.QAction('Adjust', mouse_group, shortcut='Ctrl+M',
+                icon=qt_icon('mouse'), toolTip='Default Mouse Mode - adjust brightness/contrast [Ctrl+M]',
                 checkable=True, checked=True,
                 triggered=lambda: self._set_mouse_mode(MouseOp.Normal))
-        settings_bar.addAction(default_act)
-        draw_act = QtWidgets.QAction('Draw', mouse_group, shortcut='Ctrl+C',
-                icon=qt_icon('draw_contour'), toolTip='Draw Cone Contours (Ctrl+C)',
+        settings_bar.addAction(self.default_act)
+        self.draw_act = QtWidgets.QAction('Draw', mouse_group, shortcut='Ctrl+C',
+                icon=qt_icon('draw_contour'), toolTip='Mouse Mode - Draw Cone Contours [Ctrl+C]',
                 checkable=True, checked=False,
                 triggered=lambda: self._set_mouse_mode(MouseOp.DrawContour))
-        settings_bar.addAction(draw_act)
-        edit_act = QtWidgets.QAction('Edit', mouse_group, shortcut='Ctrl+E',
-                icon=qt_icon('edit'), toolTip='Edit Cone Contours (Ctrl+E)',
+        settings_bar.addAction(self.draw_act)
+        self.edit_act = QtWidgets.QAction('Edit', mouse_group, shortcut='Ctrl+E',
+                icon=qt_icon('edit'), toolTip='Mouse Mode - Edit Cone Contours [Ctrl+E]',
                 checkable=True, checked=False,
                 triggered=lambda: self._set_mouse_mode(MouseOp.EditContour))
-        settings_bar.addAction(edit_act)
-        erase_multi_act = QtWidgets.QAction('Erase M', mouse_group, shortcut='Ctrl+D',
-                icon=qt_icon('erase'), toolTip='Erase Cone Contours (Ctrl+D)',
+        settings_bar.addAction(self.edit_act)
+        self.erase_multi_act = QtWidgets.QAction('Erase M', mouse_group, shortcut='Ctrl+D',
+                icon=qt_icon('erase'), toolTip='Mouse Mode - Erase Multiple Cone Contours [Ctrl+D]',
                 checkable=True, checked=False,
                 triggered=lambda: self._set_mouse_mode(MouseOp.EraseMulti))
-        settings_bar.addAction(erase_multi_act)
-        erase_single_act = QtWidgets.QAction('Erase S', mouse_group, shortcut='Ctrl+W',
-                icon=qt_icon('erase_contour'), toolTip='Erase Single Cone Contour (Ctrl+W)',
+        settings_bar.addAction(self.erase_multi_act)
+        self.erase_single_act = QtWidgets.QAction('Erase S', mouse_group, shortcut='Ctrl+W',
+                icon=qt_icon('erase_contour'), toolTip='Mouse Mode - Erase Single Cone Contour [Ctrl+W]',
                 checkable=True, checked=False,
                 triggered=lambda: self._set_mouse_mode(MouseOp.EraseSingle))
-        settings_bar.addAction(erase_single_act)
+        settings_bar.addAction(self.erase_single_act)
         settings_bar.addSeparator()
         
         self.undo_act = QtWidgets.QAction('Undo', shortcut='Ctrl+Z',
-                icon=qt_icon('redo'), toolTip='Undo last operation (Ctrl+Z)',
+                icon=qt_icon('redo'), toolTip='Undo last operation [Ctrl+Z]',
                 triggered=self._undo)
         settings_bar.addAction(self.undo_act)
         self.undo_act.setEnabled(False)
@@ -521,18 +582,23 @@ class MainWindow(QtWidgets.QMainWindow):
         settings_bar.addAction(self.snap_annotated_act)
         settings_bar.addSeparator()
         #
-        segment_button = QtWidgets.QToolButton()
-        segment_button.setToolTip("Segment cones")
-        segment_button.setIcon(qt_icon('segment'))
-        segment_button.setText("Segment")
-        segment_button.setToolButtonStyle(QtCore.Qt.ToolButtonTextUnderIcon)
-        segment_button.setShortcut('Ctrl+G')
-        segment_button.clicked.connect(self._segment_cone_cells)
-        settings_bar.addWidget(segment_button)
+        self.segment_act = QtWidgets.QAction('Segment', shortcut='Ctrl+G',
+                icon=qt_icon('segment'), toolTip='Segment Cones on select images [Ctrl+G]',
+                triggered=self._segment_cone_cells)
+        settings_bar.addAction(self.segment_act)
+
+        # segment_button = QtWidgets.QToolButton()
+        # segment_button.setToolTip("Segment Cones on select images (Ctrl+G)")
+        # segment_button.setIcon(qt_icon('segment'))
+        # segment_button.setText("Segment")
+        # segment_button.setToolButtonStyle(QtCore.Qt.ToolButtonTextUnderIcon)
+        # segment_button.setShortcut('Ctrl+G')
+        # segment_button.clicked.connect(self._segment_cone_cells)
+        # settings_bar.addWidget(segment_button)
     #
     def _display_about(self):
         dlg = AboutDialog(self)
-        dlg.exec()
+        dlg.exec_()
     #
     def _display_help(self):
         self.helpWindow = helpWindow = QtWidgets.QWidget()
@@ -558,6 +624,13 @@ class MainWindow(QtWidgets.QMainWindow):
         helpWindow.move(geom.width() * 20 // 100, geom.height() * 14 // 100)
         
         helpWindow.showNormal()
+    #
+    def _on_hotkey_act(self):
+        dlg = ao_hotkey_dialog(self, self._action_map, self._default_key_map)
+        dlg.update_key_map(self.hotkeys)
+        if dlg.exec_():
+            self.hotkeys = dlg.key_map
+            self.saveShortcuts()
     #
     @property
     def smooth(self):
@@ -910,6 +983,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._image_view.displaySettings = param
         self._sync_display_controls()
         self._image_view.reset_view(False)
+        self.saveState()
     #
     def _undo(self, e):
         self._image_view.cancel_editing()
@@ -973,6 +1047,9 @@ class MainWindow(QtWidgets.QMainWindow):
             c = smoothContour(c, clip=self._image_view.get_original_size())
         if len(c) < 3:
             return
+        if isTooSmall(c):
+            if not askYesNo('Annotation too small', 'Are you sure you want to add it?'):
+                return
         self.push_undo(UndoOp.Added, c)
         contours.append(c)
         self._set_contours(self._cur_img_id)
@@ -1126,8 +1203,7 @@ class MainWindow(QtWidgets.QMainWindow):
     #
     def _show_display_settings(self, e):
         self._display_settings_dlg.displaySettings = self._image_view.displaySettings
-        self._display_settings_dlg.exec_()
-        self.saveState()
+        self._display_settings_dlg.showNormal()
     #
     def trackMousePos(self, x, y):
         msg = ''
@@ -1214,6 +1290,13 @@ class MainWindow(QtWidgets.QMainWindow):
             if hasattr(self, 'bcwin'):
                 self.bcwin.close()
                 del self.bcwin
+    #
+    def _on_smooth_act(self):
+        self._display_settings_dlg.smoothAnnotations = self.smooth
+        self.saveState()
+    def _on_smooth_changed(self):
+        self.smooth = self._display_settings_dlg.smoothAnnotations
+        self.saveState()
     #
     def _save_stats(self):
         if len(self._input_data['images']) == 0: return
