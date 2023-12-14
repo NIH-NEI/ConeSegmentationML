@@ -1,4 +1,5 @@
-__all__ = ('datadir', 'UndoOp', 'UndoEntry', 'SegmentClipper', 'isPointInside', 'isIntersected', 'contourCenter',
+__all__ = ('datadir', 'UndoOp', 'UndoEntry', 'SegmentClipper', 'isPointInside', 'isIntersected',
+           'contourCenter', 'shoelaceArea',
            'findContour', 'optimizeContour', 'contourChanged', 'smoothContour', 'isTooSmall',)
 
 import sys, os, datetime
@@ -183,6 +184,18 @@ def contourCenter(contour):
         x /= n
         y /= n
     return (x, y)
+
+# Shoelace algorithm for computing area of a simple polygon
+# e.g. corners = [(2.0, 1.0), (4.0, 5.0), (7.0, 8.0)]
+def shoelaceArea(corners):
+    n = len(corners) # of corners
+    area = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        area += corners[i][0] * corners[j][1]
+        area -= corners[j][0] * corners[i][1]
+    area = abs(area) / 2.0
+    return area
 
 # Find contour containing point pt
 def findContour(pt, contours):

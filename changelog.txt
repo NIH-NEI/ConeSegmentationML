@@ -1,8 +1,11 @@
+#### Version 1.2.5-beta (2022-12-14) ####
+- Added option to write contour centers and measurements (area/diameter) when saving annotations.
+
 #### Version 1.2.4-beta (2022-08-11) ####
 - Added "Rotate" control to the "Resize box" around the edited contour, it allows to rotate
 the whole annotation around its center.
-- Added "Cusomize Keyboard Shortcuts" dialog, which allows to re-assign keyboard shortcuts for menu and
-toolbar actions. The dialog opens via menu "Options" -> "Cusomize Keyboard Shortcuts...".
+- Added "Customize Keyboard Shortcuts" dialog, which allows to re-assign keyboard shortcuts for menu and
+toolbar actions. The dialog opens via menu "Options" -> "Customize Keyboard Shortcuts...".
 - The "Display Settings" dialog converted to a non-modal always-on-top window, which allows to work with
 the main UI without closing the box.
 - The "Smooth Annotations" option is duplicated in the "Display Settings" box.

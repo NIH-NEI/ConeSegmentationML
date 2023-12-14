@@ -9,6 +9,7 @@ import imageio
 import SimpleITK as sitk
 
 from AOMetaList import *
+from AOUtil import contourCenter, shoelaceArea
 
 # def write_points(file_name, pts, img_origin, img_spacing):
 #     with open(file_name, 'w') as annotation_file:
@@ -147,6 +148,38 @@ class ao_fileIO():
             cnt += 1
         return cnt
     
+    def write_contour_extras(self, dir_name, input_data, xoptions):
+        for (img_name, img, contours) in zip(input_data['image names'], input_data['images'],
+                                        input_data['contours']):
+            if hasattr(contours, 'contours'): contours = contours.contours
+            if len(contours) == 0: continue
+            if xoptions.get('detections', False):
+                fn = img_name + '_detections.csv'
+                contour_path = os.path.join(dir_name, fn)
+                print(contour_path)
+                with open(contour_path, 'w', newline='', encoding='utf-8') as contour_file:
+                    contour_writer = csv.writer(contour_file, delimiter=',')
+                    contour_writer.writerow(['# Contour center point coordinates: XCenter YCenter'])
+                    for contour_pts in contours:
+                        if len(contour_pts) == 0:
+                            continue
+                        x, y = contourCenter(contour_pts)
+                        contour_writer.writerow(['%0.4f' % (x,), '%0.4f' % (y,)])
+            #
+            if xoptions.get('measurements', False):
+                fn = img_name + '_measurements.csv'
+                contour_path = os.path.join(dir_name, fn)
+                print(contour_path)
+                with open(contour_path, 'w', newline='', encoding='utf-8') as contour_file:
+                    contour_writer = csv.writer(contour_file, delimiter=',')
+                    contour_writer.writerow(['# Contour measurements: Area Diameter'])
+                    for contour_pts in contours:
+                        if len(contour_pts) == 0:
+                            continue
+                        area = shoelaceArea(contour_pts)
+                        diam = math.sqrt(area / math.pi) * 2.
+                        contour_writer.writerow(['%0.4f' % (area,), '%0.4f' % (diam,)])
+    #
     def write_annotation_stats(self, dir_name, input_data, suffix='_stats.csv'):
         cnt = 0
         for (img_name, contours) in zip(input_data['image names'], input_data['contours']):

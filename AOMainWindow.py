@@ -64,6 +64,67 @@ class AboutDialog(QtWidgets.QDialog):
         self.setLayout(layout)
 #
 
+class AODirectoryDialog(QtWidgets.QFileDialog):
+    save_geom = None
+    def __init__(self, ini_dir, title='Select a directory'):
+        super(AODirectoryDialog, self).__init__()
+        self.setFileMode(QtWidgets.QFileDialog.Directory)
+        self.setOption(QtWidgets.QFileDialog.DontUseNativeDialog)
+        self.setWindowTitle(title)
+        self.setDirectory(ini_dir)
+        #
+        lay = self.layout()
+        nextRow = self.layout().rowCount()
+        numCols = self.layout().columnCount()
+        #
+        optlay = QtWidgets.QGridLayout()
+        optlay.setColumnStretch(0, 0)
+        optlay.setColumnStretch(1, 1)
+        optlay.setHorizontalSpacing(50)
+        lay.addLayout(optlay, nextRow, 0, 1, numCols)
+        #
+        self.cbCenters = QtWidgets.QCheckBox('Write contour centers (*_detections.csv)')
+        optlay.addWidget(self.cbCenters, 0, 0)
+        self.cbMeasures = QtWidgets.QCheckBox('Write contour measurements (*_measurements.csv)')
+        optlay.addWidget(self.cbMeasures, 0, 1)
+        #
+        geom = QtWidgets.QApplication.primaryScreen().geometry()
+        self.gw = geom.width()
+        self.gh = geom.height()
+        self.resize(self.gw * 60 // 100, self.gh * 50 // 100)
+    #
+    def hideEvent(self, e):
+        AODirectoryDialog.save_geom = self.geometry()
+        QtWidgets.QDialog.hideEvent(self, e)
+    def showEvent(self, e):
+        QtWidgets.QDialog.showEvent(self, e)
+        if not AODirectoryDialog.save_geom is None:
+            self.setGeometry(AODirectoryDialog.save_geom)
+    #
+    @property
+    def xoptions(self):
+        return {
+            'detections': self.cbCenters.isChecked(),
+            'measurements': self.cbMeasures.isChecked(),
+        }
+    #
+    @xoptions.setter
+    def xoptions(self, v):
+        try:
+            self.cbCenters.setChecked(v['detections'])
+            self.cbMeasures.setChecked(v['measurements'])
+        except Exception:
+            pass
+    #
+    def run(self):
+        try:
+            if self.exec_():
+                return self.selectedFiles()[0]
+        except Exception:
+            pass
+        return None
+#
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
@@ -81,6 +142,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._cur_img_id = -1
         self.loadDir = QtCore.QDir.home()
         self.saveDir = QtCore.QDir.home()
+        self.xoptions = {}
         self.realNameMap = {}
 
         # State dir/files
@@ -199,6 +261,8 @@ class MainWindow(QtWidgets.QMainWindow):
             if 'smooth' in jobj:
                 self.smooth = jobj['smooth']
                 self._on_smooth_act()
+            if 'xoptions' in jobj:
+                self.xoptions = jobj['xoptions']
         except Exception:
             pass
         usern = self.getUserName()
@@ -223,6 +287,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 'extended': self.extended,
                 'realNameMap': self.realNameMap,
                 'smooth': self.smooth,
+                'xoptions': self.xoptions,
             }
             if not ldir is None:
                 jobj['loadDir'] = ldir
@@ -503,12 +568,6 @@ class MainWindow(QtWidgets.QMainWindow):
         help_menu = self.menuBar().addMenu("&Help")
         help_menu.addAction(self.about_act)
         help_menu.addAction(self.help_act)
-
-        # Invisible actions, just to make Up/Down arrows scroll through image list
-        self._h_next_image_act = QtWidgets.QAction('NextImage', self,
-                    shortcut='Down', triggered=self.next_image)
-        self._h_prev_image_act = QtWidgets.QAction('PreviousImage', self,
-                    shortcut='Up', triggered=self.previous_image)
     #
     def _screen(self):
         orig = self.vtkFrame.mapToGlobal(QtCore.QPoint(0,0))
@@ -1149,11 +1208,19 @@ class MainWindow(QtWidgets.QMainWindow):
                 sdir = self.saveDir.canonicalPath()
             except Exception:
                 sdir = QtCore.QDir.homePath()
-            dir_name = QtWidgets.QFileDialog.getExistingDirectory(self, \
-                    'Select saving directory', sdir)
+                
+            dlg = AODirectoryDialog(sdir, 'Select output directory')
+            dlg.xoptions = self.xoptions
+            print(dlg.xoptions)
+            dir_name = dlg.run()
+                
+            #dir_name = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select saving directory', sdir)
+            
             if dir_name:
+                self.xoptions = dlg.xoptions
                 cnt = self._file_io.write_contours(dir_name, self._input_data, suffix=self.hist.suffix)
                 self.status('%d contour file(s) saved to %s' % (cnt, dir_name))
+                self._file_io.write_contour_extras(dir_name, self._input_data, self.xoptions)
                 self._update_listwidget(self._input_data['image file paths'], newlist=False)
                 self.saveDir = QtCore.QDir(dir_name)
                 self.saveState()

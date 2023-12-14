@@ -272,9 +272,6 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         if key == 'Alt_L':
             self._alt_down = True
             if not self._win: key = 'Control_L'
-        if not self._mouse_in:
-            obj.OnKeyPress()
-            return
         if key == 'Up':
             if not self.mainWin is None:
                 self.mainWin.previous_image()
@@ -283,7 +280,10 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
             if not self.mainWin is None:
                 self.mainWin.next_image()
             return
-        elif key == 'Shift_L':
+        if not self._mouse_in:
+            obj.OnKeyPress()
+            return
+        if key == 'Shift_L':
             self._shift_down = True
             if not self._mouse_scroll:
                 QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.OpenHandCursor)
