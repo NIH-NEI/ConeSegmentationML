@@ -1,3 +1,6 @@
+#### Version 1.2.6-beta (2024-04-04) ####
+- Fixed bug with opening files containing UTF characters in the names.
+
 #### Version 1.2.5-beta (2022-12-14) ####
 - Added option to write contour centers and measurements (area/diameter) when saving annotations.
 

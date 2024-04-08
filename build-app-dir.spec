@@ -8,17 +8,19 @@ block_cipher = None
 # rather than precompiled python code.
 itk_datas = [x for x in collect_data_files('itk', include_py_files=True) if '__pycache__' not in x[0]]
 
+imageio_datas = [x for x in collect_data_files('imageio', include_py_files=True) if '__pycache__' not in x[0]]
+
 a = Analysis(['__main__.py'],
              pathex=['.'],
              binaries=[],
-             datas=itk_datas + \
+             datas=itk_datas + imageio_datas +\
                  [ ('./model_weights', './model_weights'),  ('./Icons/*', './Icons'),  ('./Help/*', './Help') ],
              hiddenimports=['itkBase', 'itkConfig', 'itkLazy', 'itkTypes', 'itkExtras',
                  'vtkmodules', 'vtkmodules.all', 'vtkmodules.qt.QVTKRenderWindowInteractor',
                  'vtkmodules.util','vtkmodules.util.numpy_support'],
              hookspath=[],
              runtime_hooks=[],
-             excludes=['itk', 'matplotlib.tests', 'PyQt4', 'PySide', '_tkinter',
+             excludes=['itk', 'imageio', 'matplotlib.tests', 'PyQt4', 'PySide', '_tkinter',
                        'PyQt5.QtPrintSupport', 'PyQt5.QtMultimedia', 'PyQt5.QtBluetooth'],
              win_no_prefer_redirects=False,
              win_private_assemblies=False,

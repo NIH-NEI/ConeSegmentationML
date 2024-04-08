@@ -23,14 +23,15 @@ class ao_fileIO():
         pass
 
     def read_image(self, img_name):
-        if isinstance(img_name, str):
-            itk_img = sitk.ReadImage(img_name)
-            itk_img.SetOrigin([0, 0])
-            itk_img.SetSpacing([1, 1])
-            #return sitk.GetArrayFromImage(itk_img), itk_img.GetSpacing(), itk_img.GetOrigin()
-            return itk_img
-        numpy_img = image.imread(img_name)
+        # if isinstance(img_name, str):
+        #     itk_img = sitk.ReadImage(img_name)
+        #     itk_img.SetOrigin([0, 0])
+        #     itk_img.SetSpacing([1, 1])
+        #     return itk_img
+        numpy_img = imageio.imread(img_name)
         itk_img = sitk.GetImageFromArray(numpy_img)
+        itk_img.SetOrigin([0, 0])
+        itk_img.SetSpacing([1, 1])
         return itk_img
 
     def read_contours(self, file_name, ignore_errors=True):
@@ -82,7 +83,7 @@ class ao_fileIO():
                 # let's try *.json instead
                 fdir, fn = os.path.split(file_name)
                 jpath = os.path.join(fdir, fn.split('_contours.csv')[0]+'.json')
-                with open(jpath, 'r') as fi:
+                with open(jpath, 'rt') as fi:
                     data = json.load(fi)
                     contours = MetaList([marker['contours'] for marker in data['markers']])
                     return contours
