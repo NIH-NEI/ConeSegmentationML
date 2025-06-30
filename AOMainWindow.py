@@ -23,6 +23,11 @@ from AOSnap import ao_snap_dialog
 from AOHotKey import ao_hotkey_dialog
 import AOConfig as cfg
 
+IMG_ICON_2D = 0
+IMG_ICON_ANN = 1
+IMG_ICON_3D = 2
+IMG_ICON_OPEN = 4
+
 _big_icon = QtCore.QUrl.fromLocalFile(os.path.join(ICONS_DIR, 'ConeSegmentationML256.png'))
 about_html = '''
 <table><tr>
@@ -125,6 +130,145 @@ class AODirectoryDialog(QtWidgets.QFileDialog):
         return None
 #
 
+class InputImageData(object):
+    def __init__(self, img_fpath, itk_img):
+        self.itk_img = itk_img
+        self.filepath = img_fpath
+        self._name = os.path.splitext(os.path.basename(self.filepath))[0]
+        self.color = (127.5, 255.)
+        #
+        self.imgsz = self.itk_img.GetSize()
+        self.ndim = len(self.imgsz)
+        self.nframes = 1 if self.ndim == 2 else self.imgsz[2]
+        self._cframe = 0
+        self.all_annotations = [None for _ in range(self.nframes)]
+        self._unchecked = set()
+        #
+        self.local_apath = None
+        self.hist_apath = None
+    #
+    @property
+    def name(self):
+        return self._name
+    @property
+    def listname(self):
+        return self._name if self.ndim==2 else f'[{self.nframes}] {self._name}'
+    @property
+    def statusname(self):
+        parts = []
+        if self.ndim == 3:
+            parts.append(f'Frame {self.cframe+1} of {self.nframes}')
+        sz = self.GetSize()
+        parts.append(f'[{sz[0]}x{sz[1]}]')
+        parts.append(self._name)
+        if self.is_annotated:
+            parts.append('(Annotated)')
+        return ' '.join(parts)
+    @property
+    def titlename(self):
+        if self.nframes > 1:
+            return f'[{self.cframe}] {self._name}'
+        return self._name
+    # @property
+    # def listName(self):
+    #     bn = self._name if self.ndim==2 else f'[{self.nframes}] {self._name}'
+    #     if self.is_annotated:
+    #         return u'\u221A'+bn
+    #     return u' '+bn
+    #
+    @property
+    def cframe(self):
+        return self._cframe
+    @cframe.setter
+    def cframe(self, v):
+        try:
+            if v < 0: v = 0
+            elif v >= self.nframes: v = self.nframes - 1
+        except Exception:
+            v = 0
+        self._cframe = v
+    #
+    @property
+    def annotations(self):
+        ann = self.all_annotations[self.cframe]
+        if ann is None:
+            ann = self.all_annotations[self.cframe] = MetaList()
+        return ann
+    @annotations.setter
+    def annotations(self, v):
+        self.all_annotations[self.cframe] = v
+    #
+    @property
+    def is_annotated(self):
+        return os.path.isfile(self.local_apath)
+    #
+    def GetNdArray(self):
+        n_array = sitk.GetArrayFromImage(self.itk_img)
+        return n_array[self.cframe] if self.ndim == 3 else n_array
+    def GetOrigin(self):
+        orig = self.itk_img.GetOrigin()
+        return orig[:2] if self.ndim == 3 else orig
+    def GetSize(self):
+        return self.imgsz[:2] if self.ndim == 3 else self.imgsz
+    def GetSpacing(self):
+        spacing = self.itk_img.GetSpacing()
+        return spacing[:2] if self.ndim == 3 else spacing
+    #
+    def isChecked(self, fr):
+        return not fr in self._unchecked
+    def setChecked(self, fr, st):
+        if fr < 0 or fr >= self.nframes:
+            return
+        if not st:
+            self._unchecked.add(fr)
+        else:
+            self._unchecked.discard(fr)
+    def anyChecked(self):
+        return len(self._unchecked) < self.nframes
+    #
+    def countChecked(self):
+        return self.nframes - len(self._unchecked)
+    #
+    def importAnnotations(self, aa):
+        for fr, _ in enumerate(self.all_annotations):
+            ann = aa.get(fr)
+            if isinstance(ann, tuple):
+                ann = list(ann)
+            self.all_annotations[fr] = ann
+        if 'unchecked' in aa:
+            self._unchecked.clear()
+            for fr in aa['unchecked']:
+                self._unchecked.add(fr)
+    #
+    def exportAnnotations(self):
+        res = {}
+        for fr, ann in enumerate(self.all_annotations):
+            if not ann is None:
+                res[fr] = ann
+        if len(self._unchecked) > 0:
+            res['unchecked'] = sorted(self._unchecked)
+        return res
+    #
+    def acount(self):
+        res = 0
+        for ann in self.all_annotations:
+            if ann:
+                res += len(ann)
+        return res
+    #
+    def aclear(self):
+        self.all_annotations = [None for _ in range(self.nframes)]
+    #
+
+class EnterListWidget(QtWidgets.QListWidget):
+    def keyPressEvent(self, event: QtGui.QKeyEvent):
+        if event.key() == QtCore.Qt.Key_Enter or event.key() == QtCore.Qt.Key_Return:
+            if self.currentItem():
+                self.itemDoubleClicked.emit(self.currentItem())
+        else:
+            super().keyPressEvent(event)
+#
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
@@ -132,14 +276,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowIcon(qt_icon('ConeSegmentationML.png'))
 
         self._mute = True
-        self._input_data = {
-            'image file paths': [],
-            'image names': [],
-            'images': [],
-            'contours': [],
-            'colors': [],
-        }
+        self._input_data = []
         self._cur_img_id = -1
+        self._cur_3d = None
+        self._status_id = -1
+        
+        self._icon_map = dict([
+            (IMG_ICON_2D, qt_icon('circlegray')),
+            (IMG_ICON_2D | IMG_ICON_ANN, qt_icon('circlegreen')),
+            (IMG_ICON_3D, qt_icon('squareplusgray')),
+            (IMG_ICON_3D | IMG_ICON_ANN, qt_icon('squareplusgreen')),
+            (IMG_ICON_OPEN, qt_icon('squareminus')),
+            (IMG_ICON_OPEN | IMG_ICON_ANN, qt_icon('squareminus'))
+        ])
+        
         self.loadDir = QtCore.QDir.home()
         self.saveDir = QtCore.QDir.home()
         self.xoptions = {}
@@ -175,7 +325,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._status_id = -1
         self.mposText = QtWidgets.QLabel()
         #self.mposText.setReadOnly(True)
-        self.mposText.setMaximumWidth(geom.width()*25//100)
+        self.mposText.setMaximumWidth(geom.width()*40//100)
         self._status_bar.addPermanentWidget(self.mposText, 0)
 
         self._segmentation_para_dlg = ao_parameter_dialog(self)
@@ -364,16 +514,16 @@ class MainWindow(QtWidgets.QMainWindow):
     #
     def _initialize_input_data(self):
         self._image_view.abort_editing()
-        self._input_data['image file paths'].clear()
-        self._input_data['image names'].clear()
-        self._input_data['images'].clear()
-        self._input_data['contours'].clear()
-        self._input_data['colors'].clear()
+        self._input_data = []
+        self._cur_img_id = -1
+        self._cur_3d = None
 
     def _setup_layout(self):
         frame = Qt.QFrame()
-        self._file_list = QtWidgets.QListWidget(self)
+        self._file_list = EnterListWidget(self)
         self._file_list.currentRowChanged.connect(self._file_list_row_changed)
+        self._file_list.itemDoubleClicked.connect(self._file_list_item_doublecklicked)
+        self._file_list.itemChanged.connect(self._file_list_item_changed)
 
         self.vtkFrame = vtkWidget = QVTKRenderWindowInteractor(frame)
         self._image_view = AOImageView.ao_visualization(vtkWidget, parent=self)
@@ -487,6 +637,12 @@ class MainWindow(QtWidgets.QMainWindow):
                     toolTip='Show/Hide all annotations [F2]',
                     triggered=self._toggle_visibility)
 
+        self.toggle_rotation = QtWidgets.QAction('Contour Rotation', self, shortcut='Ctrl+R',
+                    checkable=True, checked=True,
+                    statusTip='Enable rotation when editing contours [Ctrl+R]',
+                    toolTip='Enable rotation when editing contours [Ctrl+R]',
+                    triggered=self._toggle_rotation)
+
         self.voronoi_act = QtWidgets.QAction('Voronoi', shortcut='Ctrl+V',
                 icon=qt_icon('Voronoi'), statusTip='Toggle Voronoi Diagram display [Ctrl+V]',
                 checkable=True, checked=False,
@@ -550,6 +706,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 statusTip='Apply Smmothing Splines to manually added or edited annotations [Ctrl+T]',
                 checkable=True, checked=False, triggered=self._on_smooth_act)
         opt_menu.addAction(self.smooth_act)
+        opt_menu.addAction(self.toggle_rotation)
 
         self.hotkey_act = QtWidgets.QAction('Customize Keyboard Shortcuts...',
                 statusTip='Select user-defined keyboard shortcuts for common actions',
@@ -580,17 +737,42 @@ class MainWindow(QtWidgets.QMainWindow):
         clip.setPixmap(pixmap)
         self.status('Viewport copied to clipboard.')
     #
-    def _update_listwidget(self, image_paths, newlist=True):
-        if len(image_paths) != self._file_list.count():
+    def _update_listwidget(self, newlist=True):
+        if not self._cur_3d is None:
+            imdat = self._cur_3d
+            nitems = imdat.nframes + 1
+            if nitems != self._file_list.count():
+                newlist = True
+            self._mute = True
+            if newlist:
+                self._file_list.clear()
+                item = QtWidgets.QListWidgetItem(self._icon_map[IMG_ICON_OPEN], imdat.name, self._file_list)
+                item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
+                item.setCheckState(QtCore.Qt.Checked if imdat.anyChecked() else QtCore.Qt.Unchecked)
+                font = item.font()
+                hfont = QtGui.QFont(font.family(), font.pointSize(), QtGui.QFont.Bold)
+                item.setFont(hfont)
+                for i in range(imdat.nframes):
+                    item = QtWidgets.QListWidgetItem(f'Frame {i+1}', self._file_list)
+                    item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
+            for i in range(imdat.nframes):
+                item = self._file_list.item(i+1)
+                item.setCheckState(QtCore.Qt.Checked if imdat.isChecked(i) else QtCore.Qt.Unchecked)
+            self._mute = False
+            return
+        if len(self._input_data) != self._file_list.count():
             newlist = True
         if newlist:
             self._file_list.clear()
-            for img_path in image_paths:
-                bn, _ = os.path.splitext(os.path.basename(img_path))
-                self._file_list.addItem(self.hist.get_list_name(img_path))
+            for imdat in self._input_data:
+                ico_idx = IMG_ICON_3D if imdat.nframes > 1 else IMG_ICON_2D
+                if imdat.is_annotated:
+                    ico_idx |= IMG_ICON_ANN
+                QtWidgets.QListWidgetItem(self._icon_map[ico_idx], imdat.listname, self._file_list)
+                #self._file_list.addItem(imdat.listName)
         else:
-            for row, img_path in enumerate(image_paths):
-                self._file_list.item(row).setText(self.hist.get_list_name(img_path))
+            for row, imdat in enumerate(self._input_data):
+                self._file_list.item(row).setText(imdat.listname)
 
     def _setup_toolbar(self):
         settings_bar = self.addToolBar("Settings")
@@ -717,7 +899,7 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             self._image_view.cancel_editing()
             self.clear_undo()
-            contours = self._input_data['contours'][self._cur_img_id]
+            contours = self._input_data[self._cur_img_id].annotations
             contours.current_index = v
             #self.contour_pts_checkbox.setChecked(True)
             self._image_view.visibility = True
@@ -729,33 +911,36 @@ class MainWindow(QtWidgets.QMainWindow):
     #
     def onIterFreeze(self):
         try:
-            contours = self._input_data['contours'][self._cur_img_id]
+            contours = self._input_data[self._cur_img_id].annotations
             
             if not askYesNo('Confirm',
                     'You are about to "freeze" current set of annotations by deleting alternatives.',
                     detail='This operation can not be undone. \nContinue?'):
                 return
             
-            self._input_data['contours'][self._cur_img_id] = contours.contours
+            self._input_data[self._cur_img_id].annotations = contours.contours
             self._set_contours(self._cur_img_id)
             self.SaveHistory()
         except Exception:
             self.iter_btn.setEnabled(False)
     #
+    def selected_imdat(self):
+        if len(self._input_data) == 0 or self._cur_img_id == -1:
+            return None
+        return self._input_data[self._cur_img_id]
     def _snap_annotated(self):
-        if len(self._input_data['images']) == 0: return
-        if self._cur_img_id == -1:
-            return
+        imdat = self.selected_imdat()
+        if imdat is None: return
         dlg = ao_snap_dialog(parent=self, glyph_scale=0.5)
-        dlg.setWindowTitle(self._input_data['image names'][self._cur_img_id]+' - Snapshot')
+        dlg.setWindowTitle(imdat.listname+' - Snapshot')
         dlg.setWindowIcon(qt_icon('ConeSegmentationML.png'))
         dlg.setImageData(
-            self._input_data['image file paths'][self._cur_img_id],
-            img_data=self._input_data['images'][self._cur_img_id],
+            imdat.filepath,
+            imdat.GetNdArray(),
             displaySettings=self._image_view.displaySettings,
             colorInfo=self._image_view.color_info,
         )
-        contours = self._input_data['contours'][self._cur_img_id]
+        contours = imdat.annotations
         if hasattr(contours, 'contours'):
             contours = contours.contours
         dlg.setContours(contours)
@@ -766,7 +951,7 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             dlg.loadDir = self.loadDir.canonicalPath()
             dlg.annDir = self.saveDir.canonicalPath()
-            dlg.setCheckedImages(self._input_data['image file paths'])
+            dlg.setCheckedImages([imdat.filepath for imdat in self._input_data])
         except Exception:
             pass
         rc = dlg.selectImageFiles()
@@ -785,90 +970,77 @@ class MainWindow(QtWidgets.QMainWindow):
     def _open_image_list(self, img_filenames, ann_filenames=None, no_ann=False, save_state=False):
         img_dir = None
         err_files = []
-        if len(img_filenames) is not 0:
-            self._initialize_input_data()
-            self._image_view.reset_color()
-            if hasattr(self, 'bcwin'):
-                self.bcwin.color_info = self._image_view.color_info
-            metainit()
-            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
-            self._progress_dlg.setWindowTitle('Open Images')
-            self._progress_dlg.show()
-            self._progress_dlg.set_progress(0)
+        if len(img_filenames) == 0:
+            return
+        self._initialize_input_data()
+        self._image_view.reset_color()
+        if hasattr(self, 'bcwin'):
+            self.bcwin.color_info = self._image_view.color_info
+        metainit()
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        self._progress_dlg.setWindowTitle('Open Images')
+        self._progress_dlg.show()
+        self._progress_dlg.set_progress(0)
 
-            for idx, img_name in enumerate(img_filenames):
+        for idx, img_name in enumerate(img_filenames):
+            try:
                 itk_img = self._file_io.read_image(img_name)
-                self._input_data['images'].append(itk_img)
-                self._input_data['image file paths'].append(img_name)
-                self._input_data['image names'].append(os.path.splitext(os.path.basename(img_name))[0])
-                self._input_data['colors'].append((127.5, 255.))
-
-                if img_dir is None:
-                    img_dir = os.path.abspath(os.path.dirname(img_name))
-
-                #extract annotation file
-                history_file_name = self.hist.get_history_file(img_name)
-                local_file_name = self.hist.get_local_file(img_name)
-
-                contour_pts = MetaList()
-                
-                if not no_ann:
-                    if not ann_filenames is None:
-                        user_file_name = ann_filenames[idx]
-                        # Read user-specified annotations file first
-                        if user_file_name and os.path.isfile(user_file_name):
-                            try:
-                                contour_pts = self._file_io.read_contours(user_file_name, ignore_errors=False)
-                            except Exception:
-                                err_files.append(user_file_name)
-                        elif os.path.isfile(history_file_name):
-                            contour_pts = self._file_io.read_contours(history_file_name)
-                    else:
-                        # Read history first as it may contain more up to date info
-                        if os.path.isfile(history_file_name):
-                            contour_pts = self._file_io.read_contours(history_file_name)
-                        elif os.path.isfile(local_file_name):
-                            contour_pts = self._file_io.read_contours(local_file_name)
-                
-                self._input_data['contours'].append(contour_pts)
-
-                self._file_io.write_contour(history_file_name, self._input_data['contours'][idx],
-                                            itk_img.GetOrigin(), itk_img.GetSpacing())
-
-                self._progress_dlg.set_progress((idx+1)/float(len(img_filenames))* 100)
-                QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
-
-            self._update_listwidget(self._input_data['image file paths'], newlist=True)
-            self._image_view.image_visibility = True
-            self._display_image(0)
-            self._cur_img_id = 0
-            self._file_list.setCurrentRow(self._cur_img_id)
-
-            self._progress_dlg.set_progress(0);
-            QtWidgets.QApplication.restoreOverrideCursor()
-            self._progress_dlg.hide()
-            #
+                assert len(itk_img.GetSize()) in (2, 3)
+            except Exception as ex:
+                print(f'Failed to open {img_name}, possibly wrong format: {ex}')
+                continue
+            imdat = InputImageData(img_name, itk_img)
+            imdat.hist_apath = self.hist.get_history_file(img_name)
+            imdat.local_apath = self.hist.get_local_file(img_name)
+            self._input_data.append(imdat)
+            
             if img_dir is None:
-                img_dir = ''
-            elif save_state:
-                self.saveDir = self.loadDir = QtCore.QDir(img_dir)
-                self.saveState()
-            self.status(img_dir)
-        if len(err_files) > 0:
-            if len(err_files) > 5:
-                err_files = err_files[:4] + ['... +%d more.' % (len(err_files)-4,)]
-            display_error('Failed to read the following file(s):', '\n'.join(err_files) + \
-                '\n(do you attempt to open spreadsheet(s) generated by other applications?)')
+                img_dir = os.path.abspath(os.path.dirname(img_name))
+            
+            aa = {}
+            save_hist = False
+            if not no_ann:
+                if os.path.isfile(imdat.hist_apath):
+                    aa = self._file_io.read_contours(imdat.hist_apath)
+                elif os.path.isfile(imdat.local_apath):
+                    aa = self._file_io.read_contours(imdat.local_apath)
+                    save_hist = True
+            imdat.importAnnotations(aa)
+                
+            if save_hist:
+                self._file_io.write_contour(imdat.hist_apath, imdat.exportAnnotations(),
+                        imdat.itk_img.GetOrigin(), imdat.itk_img.GetSpacing())
+
+            self._progress_dlg.set_progress((idx+1)/float(len(img_filenames))* 100)
+            QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+
+        self._update_listwidget()
+        self._image_view.image_visibility = True
+        self._display_image(0)
+        self._cur_img_id = 0
+        self._file_list.setCurrentRow(self._cur_img_id)
+
+        self._progress_dlg.set_progress(0);
+        QtWidgets.QApplication.restoreOverrideCursor()
+        self._progress_dlg.hide()
+        #
+        if img_dir is None:
+            img_dir = ''
+        elif save_state:
+            self.saveDir = self.loadDir = QtCore.QDir(img_dir)
+            self.saveState()
+        self.status(img_dir)
     #
     def _get_data_index(self, csv_file_path, strict=True):
         fn = os.path.basename(csv_file_path)
-        for id, img_name in enumerate(self._input_data['image names']):
+        bn, ext = os.path.splitext(fn)
+        for id, imdat in enumerate(self._input_data):
             if strict:
-                if fn == img_name + self.hist.suffix:
+                if bn == imdat.name:
                     return id
-            else:
-                if fn.startswith(img_name):
-                    return id
+        else:
+            if bn.startswith(imdat.name):
+                return id
         return -1
     #        
     def _open_contour_list(self, csv_filenames, strict=True):
@@ -876,17 +1048,16 @@ class MainWindow(QtWidgets.QMainWindow):
         for csv_file in csv_filenames:
             id = self._get_data_index(csv_file, strict)
             if id != -1:
+                imdat = self._input_data[id]
                 try:
-                    contour_pts = self._file_io.read_contours(csv_file, ignore_errors=False)
+                    aa = self._file_io.read_contours(csv_file, ignore_errors=False)
                 except Exception:
                     err_files.append(os.path.basename(csv_file))
                     continue
-                self._input_data['contours'][id] = contour_pts
                 
-                history_file_name = self.hist.get_history_file(self._input_data['image file paths'][id])
-                self._file_io.write_contour(history_file_name, self._input_data['contours'][id],
-                                             self._input_data['images'][id].GetOrigin(),
-                                             self._input_data['images'][id].GetSpacing())
+                imdat.importAnnotations(aa)
+                self._file_io.write_contour(imdat.hist_apath, imdat.exportAnnotations(),
+                                imdat.itk_img.GetOrigin(), imdat.itk_img.GetSpacing())
         if self._cur_img_id >= 0:
             self._display_image(self._cur_img_id)
         if len(err_files) > 0:
@@ -896,13 +1067,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 '\n(do you attempt to open spreadsheet(s) generated by other applications?)')
     #
     def _show_data_locations(self):
-        if self._cur_img_id < 0 or self._cur_img_id >= len(self._input_data['image file paths']):
+        if self._cur_img_id < 0 or self._cur_img_id >= len(self._input_data):
             return
-        img = self._input_data['images'][self._cur_img_id]
-        img_path = os.path.abspath(self._input_data['image file paths'][self._cur_img_id])
-        loc_path = self.hist.get_local_file(img_path)
-        hist_path = self.hist.get_history_file(img_path, False)
-        self._data_loc_dlg.setPaths(img, img_path, loc_path, hist_path)
+        imdat = self._input_data[self._cur_img_id]
+        #
+        img_path = os.path.abspath(imdat.filepath)
+        self._data_loc_dlg.setPaths(imgdat.itk_img, img_path, imdat.local_apath, imdat.hist_apath)
         self._data_loc_dlg.exec()
     #
     def next_image(self):
@@ -912,11 +1082,55 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._file_list.currentRow() > 0:
             self._file_list.setCurrentRow(self._file_list.currentRow() - 1)
     def _file_list_row_changed(self, newrow):
-        if self._cur_img_id >= 0 and self._cur_img_id < len(self._input_data['colors']):
-            self._input_data['colors'][self._cur_img_id] = self._image_view.color_info
+        if self._cur_3d:
+            imdat = self._cur_3d
+            imdat.color = self._image_view.color_info
+            if newrow > 0 and newrow <= imdat.nframes:
+                imdat.cframe = newrow - 1
+                self._display_image(self._cur_img_id)
+            return
+        if self._cur_img_id >= 0:
+            imdat = self._input_data[self._cur_img_id]
+            imdat.color = self._image_view.color_info
         self._cur_img_id = newrow
         self._display_image(self._cur_img_id)
     #
+    def _file_list_item_doublecklicked(self, item):
+        row = self._file_list.row(item)
+        if self._cur_3d:
+            if row == 0:
+                self._cur_3d = None
+                row = self._cur_img_id
+            else:
+                row = -1
+        else:
+            imdat = self._input_data[row]
+            if imdat.nframes > 1:
+                self._cur_img_id = row
+                self._cur_3d = imdat
+                row = imdat.cframe + 1
+            else:
+                row = -1
+        if row >= 0:
+            self._update_listwidget(newlist=True)
+            self._file_list.setCurrentRow(row)
+    #
+    def _file_list_item_changed(self, item):
+        if self._mute or self._cur_3d is None: return
+        self._mute = True
+        row = self._file_list.row(item)
+        checked = item.checkState() == QtCore.Qt.Checked
+        imdat = self._cur_3d
+        if row == 0:
+            check = QtCore.Qt.Checked if checked else QtCore.Qt.Unchecked
+            for i in range(1, self._file_list.count()):
+                self._file_list.item(i).setCheckState(check)
+                imdat.setChecked(i-1, checked)
+        else:
+            imdat.setChecked(row-1, checked)
+        self._mute = False
+        if row != self._file_list.currentRow():
+            self._file_list.setCurrentRow(row)
     def _update_source_win(self, contours):
         if self._mute: return
         if hasattr(self, 'srcwin') and self.srcwin.isVisible():
@@ -925,7 +1139,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def _set_contours(self, idx, edit_idx=None):
         if idx is None:
             idx = self._cur_img_id
-        contours = self._input_data['contours'][idx]
+        if idx < 0 or idx >= len(self._input_data):
+            return
+        imdat = self._input_data[idx]
+
+        contours = imdat.annotations
         if hasattr(contours, 'contours'):
             self._image_view.set_contours(contours.contours, edit_idx)
             self._iter_slider_status(
@@ -940,10 +1158,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def _display_image(self, idx):
         self.clear_undo()
         self._image_view.initialization()
-        if idx < 0 or idx >= len(self._input_data['images']):
+        if idx < 0 or idx >= len(self._input_data):
             return
-        self._image_view.set_image(self._input_data['images'][idx])
-        self._image_view.color_info = self._input_data['colors'][idx]
+        imdat = self._input_data[idx]
+        self._image_view.set_image(imdat.itk_img, n_array=imdat.GetNdArray())
+        self._image_view.color_info = imdat.color
         self._set_contours(idx)
         self._image_view.visibility = True
         self._sync_display_controls()
@@ -955,8 +1174,8 @@ class MainWindow(QtWidgets.QMainWindow):
         #res = AOSettingsDialog.display_warning('Detecting cone cells', 'Do you really want to detect cells?')
         self._segmentation_para_dlg.extended = self.extended
         sv_state = self._segmentation_para_dlg.state
-        self._segmentation_para_dlg.SetImageList(self._input_data['image names'])
-        c_rows = [row for row, ann in enumerate(self._input_data['contours']) if len(ann) == 0]
+        self._segmentation_para_dlg.SetImageList([imdat.name for imdat in self._input_data])
+        c_rows = [row for row, imdat in enumerate(self._input_data) if imdat.acount() == 0]
         self._segmentation_para_dlg.SetCheckedRows(c_rows)
         self._segmentation_para_dlg.SetHighlightedRow(self._cur_img_id)
         res = self._segmentation_para_dlg.exec()
@@ -966,8 +1185,9 @@ class MainWindow(QtWidgets.QMainWindow):
         
         c_rows = self._segmentation_para_dlg.checkedRows()
         self.saveState()
-        if len(c_rows) == 0:
-            display_error('Input error:', 'Nothing was checked.')
+        progr_total = sum([self._input_data[row].countChecked() for row in c_rows])
+        if progr_total == 0:
+            display_error('Input error', 'Nothing was checked.')
             return
 
         cur_segmentation_model = self._segmentation_para_dlg.model_weights
@@ -988,6 +1208,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._progress_dlg.setWindowTitle('Segment cones ...')
         self._progress_dlg.show()
         self._progress_dlg.set_progress(0)
+        progr_cur = 0
 
         fov = self._segmentation_para_dlg.image_fov
         levelset_iterations = self._segmentation_para_dlg.levelset_iterations
@@ -997,10 +1218,27 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
             
             for i, row in enumerate(c_rows):
-                # contours = self._input_data['contours'][row]
-                img = self._input_data['images'][row]
-                self._input_data['contours'][row] = self._segmentation.segment_cones(
-                    cur_segmentation_model, img, fov, levelset_iterations, contour_length)
+                imdat = self._input_data[row]
+                
+                aa = {}
+                if imdat.nframes > 1:
+                    n_array = sitk.GetArrayFromImage(imdat.itk_img)
+                    for fr in range(imdat.nframes):
+                        if not imdat.isChecked(fr): continue
+                        itk_img = sitk.GetImageFromArray(n_array[fr])
+                        aa[fr] = self._segmentation.segment_cones(
+                            cur_segmentation_model, itk_img, fov, levelset_iterations, contour_length)
+                        progr_cur += 1
+                        self._progress_dlg.set_progress(float(progr_cur)/float(progr_total) * 100.)
+                        QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+                else:
+                    aa[0] = self._segmentation.segment_cones(
+                        cur_segmentation_model, imdat.itk_img, fov, levelset_iterations, contour_length)
+                    progr_cur += 1
+                    self._progress_dlg.set_progress(float(progr_cur)/float(progr_total) * 100.)
+                    QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+                
+                imdat.importAnnotations(aa)
                 self.SaveHistory(row)
     
                 self._progress_dlg.set_progress( (i+1)*100. / float(len(c_rows)) )
@@ -1023,19 +1261,21 @@ class MainWindow(QtWidgets.QMainWindow):
             i = self._cur_img_id
         if i < 0:
             return
-        
-        history_file_name = self.hist.get_history_file(self._input_data['image file paths'][i])
-        contours = self._input_data['contours'][i]
-        img = self._input_data['images'][i]
-        if hasattr(contours, 'contours'):
-            contours = contours.contours
-        self._file_io.write_contour(history_file_name, contours, img.GetOrigin(), img.GetSpacing())
+        imdat = self._input_data[i]
+        aa_src = imdat.exportAnnotations()
+        aa = {}
+        for fr, contours in aa_src.items():
+            if hasattr(contours, 'contours'):
+                contours = contours.contours
+            aa[fr] = contours
+        self._file_io.write_contour(imdat.hist_apath, aa, imdat.itk_img.GetOrigin(), imdat.itk_img.GetSpacing())
     #
     def _sync_display_controls(self):
         self._mute = True
         self.toggle_interpolation.setChecked(self._image_view.interpolation)
         self.voronoi_act.setChecked(self._image_view.voronoi)
         self.toggle_visibility.setChecked(self._image_view.visibility)
+        self.toggle_rotation.setChecked(self._image_view.rotation)
         self._mute = False
         self._toggle_extended()
     def _on_display_settings(self, param):
@@ -1056,7 +1296,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._cur_img_id == -1:
             self.clear_undo()
             return
-        contours = self._input_data['contours'][self._cur_img_id]
+        contours = self._input_data[self._cur_img_id].annotations
         modified = False
         while True:
             e = self._undo_buf.pop()
@@ -1100,7 +1340,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def AddContour(self, contour_pts):
         if self._cur_img_id == -1:
             return
-        contours = self._input_data['contours'][self._cur_img_id]
+        contours = self._input_data[self._cur_img_id].annotations
         c = optimizeContour(contour_pts)
         if self.smooth:
             c = smoothContour(c, clip=self._image_view.get_original_size())
@@ -1119,7 +1359,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         contour_pts = optimizeContour(contour_pts)
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
-        in_contours = self._input_data['contours'][self._cur_img_id]
+        in_contours = self._input_data[self._cur_img_id].annotations
         out_contours = []
         last = True
         for c in in_contours:
@@ -1135,14 +1375,14 @@ class MainWindow(QtWidgets.QMainWindow):
             if hasattr(in_contours, 'update'):
                 in_contours.update(out_contours)
             else:
-                self._input_data['contours'][self._cur_img_id] = out_contours
+                self._input_data[self._cur_img_id].annotations = out_contours
             self._set_contours(self._cur_img_id)
             self.SaveHistory()
     #
     def RemoveContourAt(self, pt):
         if self._cur_img_id == -1:
             return
-        in_contours = self._input_data['contours'][self._cur_img_id]
+        in_contours = self._input_data[self._cur_img_id].annotations
         out_contours = []
         last = True
         for c in in_contours:
@@ -1157,14 +1397,14 @@ class MainWindow(QtWidgets.QMainWindow):
             if hasattr(in_contours, 'update'):
                 in_contours.update(out_contours)
             else:
-                self._input_data['contours'][self._cur_img_id] = out_contours
+                self._input_data[self._cur_img_id].annotations = out_contours
             self._set_contours(self._cur_img_id)
             self.SaveHistory()
     #
     def EditContourAt(self, pt):
         if self._cur_img_id == -1:
             return
-        contours = self._input_data['contours'][self._cur_img_id]
+        contours = self._input_data[self._cur_img_id].annotations
         if hasattr(contours, 'contours'):
             contours = contours.contours
         self._edited_contour_idx = idx = findContour(pt, contours)
@@ -1184,7 +1424,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def UpdateContour(self, idx, contour_pts):
         if self._cur_img_id == -1:
             return
-        contours = self._input_data['contours'][self._cur_img_id]
+        contours = self._input_data[self._cur_img_id].annotations
         if hasattr(contours, 'contours'):
             contours = contours.contours
         meta_changed = False
@@ -1201,7 +1441,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._update_source_win(contours)
     #
     def _save_data(self):
-        if len(self._input_data['images']) == 0: return
+        if len(self._input_data) == 0: return
         self._image_view.cancel_editing()
         try:
             try:
@@ -1218,10 +1458,18 @@ class MainWindow(QtWidgets.QMainWindow):
             
             if dir_name:
                 self.xoptions = dlg.xoptions
-                cnt = self._file_io.write_contours(dir_name, self._input_data, suffix=self.hist.suffix)
+                cnt = 0
+                for imdat in self._input_data:
+                    if imdat.acount() == 0: continue
+                    img_name, _ = os.path.splitext(imdat.name)
+                    fn = os.path.basename(imdat.local_apath)
+                    apath = os.path.abspath(os.path.join(dir_name, fn))
+                    self._file_io.write_contour(apath, imdat.exportAnnotations(), imdat.GetOrigin(), imdat.GetSpacing())
+                    self._file_io.write_contour_extra(dir_name, img_name, imdat.exportAnnotations(), self.xoptions)
+                    cnt += 1
+                #
                 self.status('%d contour file(s) saved to %s' % (cnt, dir_name))
-                self._file_io.write_contour_extras(dir_name, self._input_data, self.xoptions)
-                self._update_listwidget(self._input_data['image file paths'], newlist=False)
+                self._update_listwidget(newlist=False)
                 self.saveDir = QtCore.QDir(dir_name)
                 self.saveState()
         except Exception as ex:
@@ -1230,7 +1478,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _delete_all(self):
         id = self._cur_img_id
         if id < 0: return
-        if len(self._input_data['contours'][id]) == 0: return
+        imdat = self._input_data[self._cur_img_id]
+        if imdat.acount() == 0: return
         if not askYesNo('Confirm',
                 'You are about to delete all annotations \non the current image.',
                 detail='This operation can not be undone. \nContinue?'):
@@ -1240,8 +1489,8 @@ class MainWindow(QtWidgets.QMainWindow):
         #self.contour_pts_checkbox.setChecked(True)
         self._image_view.visibility = True
         self._sync_display_controls()
-        self._input_data['contours'][id] = MetaList()
-        self._image_view.set_contours(self._input_data['contours'][id])
+        imdat.aclear()
+        self._image_view.set_contours(imdat.annotations)
         self._image_view.reset_view(False)
         self.SaveHistory()
 
@@ -1258,13 +1507,17 @@ class MainWindow(QtWidgets.QMainWindow):
             self._image_view.reset_view()
             self.saveState()
     #
+    def _toggle_rotation(self):
+        if not self._mute:
+            self._image_view.rotation = self.toggle_rotation.isChecked()
+    #
     def _reset_brightness_contrast(self):
         self.resetSources()
         self._image_view.reset_color()
         if hasattr(self, 'bcwin'):
             self.bcwin.color_info = self._image_view.color_info
         if self._cur_img_id >= 0:
-            self._input_data['colors'][self._cur_img_id] = self._image_view.color_info
+            self._input_data[self._cur_img_id].color = self._image_view.color_info
         self._image_view.reset_view(True)
         self._image_view.image_visibility = True
     #
@@ -1275,7 +1528,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def trackMousePos(self, x, y):
         msg = ''
         try:
-            contours = self._input_data['contours'][self._cur_img_id]
+            contours = self._input_data[self._cur_img_id].annotations
             if hasattr(contours, 'contours'):
                 contours = contours.contours
             idx = findContour((x, y, 0), contours)
@@ -1303,7 +1556,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def resetSources(self, update=False):
         id = self._cur_img_id
         if id < 0: return
-        contours = self._input_data['contours'][id]
+        contours = self._input_data[id].annotations
         if hasattr(contours, 'contours'):
             contours = contours.contours
         if hasattr(contours, 'setGrayMeta'):
@@ -1315,7 +1568,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _select_annotation_sources(self, e):
         id = self._cur_img_id
         if id < 0: return
-        contours = self._input_data['contours'][id]
+        contours = self._input_data[id].annotations
         if hasattr(contours, 'contours'):
             contours = contours.contours
         #if len(contours) == 0: return
@@ -1366,7 +1619,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.saveState()
     #
     def _save_stats(self):
-        if len(self._input_data['images']) == 0: return
+        if len(self._input_data) == 0: return
         self._image_view.cancel_editing()
         try:
             try:

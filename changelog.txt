@@ -1,3 +1,10 @@
+#### Version 1.3.0 (2025-06-16) ####
+- Added possibility to open 3D image stacks. They are marked with a different icon in the list of open files,
+when the user double-clicks on such entry, a list of frames is displayed, so the user can browse across
+separate frames and select ones intended for automatic processing (auto-detection).
+- Added option for toggling on/off the rotation feature of the resize box around contours when editing.
+It is available via menu "Options" -> "Contour Rotation" or Ctrl+R keyboard shortcut (configurable).
+
 #### Version 1.2.6-beta (2024-04-04) ####
 - Fixed bug with opening files containing UTF characters in the names.
 

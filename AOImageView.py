@@ -331,6 +331,7 @@ class ao_resize_box():
                 ao_resize_box.CURSORS.append(qt_cursor(fn))
         self._box_pts = []
         self._box_polys = []
+        self.rotation = True
         #
         self.observers = []
         #
@@ -380,6 +381,8 @@ class ao_resize_box():
         x = pos[0]
         y = pos[1]
         for i, poly in enumerate(self._box_polys):
+            if not self.rotation and i >= self.rotidx:
+                return -1
             if len(poly) != 4: continue
             tl = poly[0]
             br = poly[2]
@@ -565,6 +568,7 @@ class ao_resize_box():
                 self._box_lines.InsertCellPoint(id+start_index)
             self._box_lines.InsertCellPoint(start_index)
         #
+        self.rotidx = len(self._box_polys)
         dx = s[0]*3.
         dy = s[1]*3.
         self._box_polys.append([ [xmin-dx, ymin-dy], [xmin, ymin-dy], [xmin, ymin], [xmin-dx, ymin] ])
@@ -856,17 +860,24 @@ class ao_visualization():
         camera.SetViewUp(0.0, -1.0, 0.0)
         camera.SetParallelProjection(True)
         #camera.SetParallelScale(camera.GetParallelScale() * 0.66667)
-
+    #
+    @property
+    def rotation(self):
+        return self._resize_box.rotation
+    @rotation.setter
+    def rotation(self, st):
+        self._resize_box.rotation = st
+    #
     def reset_view(self, camera_flag=False):
         if camera_flag:
             self._change_camera_orientation()
         self._vtk_widget.GetRenderWindow().Render()
 
-    def _convert_nparray_to_vtk_image(self, itk_img, vtk_img):
+    def _convert_nparray_to_vtk_image(self, itk_img, n_array, vtk_img):
         img_size = itk_img.GetSize()
         img_orig = itk_img.GetOrigin()
         img_spacing = itk_img.GetSpacing()
-        n_array = sitk.GetArrayFromImage(itk_img)
+        #n_array = sitk.GetArrayFromImage(itk_img)
         v_image = numpy_support.numpy_to_vtk(n_array.flat)
         vtk_img.SetOrigin(img_orig[0], img_orig[1], 0)
         vtk_img.SetSpacing(img_spacing[0], img_spacing[1], 1.0)
@@ -874,9 +885,11 @@ class ao_visualization():
         vtk_img.AllocateScalars(numpy_support.get_vtk_array_type(n_array.dtype), 1)
         vtk_img.GetPointData().SetScalars(v_image)
 
-    def set_image(self, itk_img):
+    def set_image(self, itk_img, n_array=None):
+        if n_array is None:
+            n_array = sitk.GetArrayFromImage(itk_img)
         self._image_data.Initialize()
-        self._convert_nparray_to_vtk_image(itk_img, self._image_data)
+        self._convert_nparray_to_vtk_image(itk_img, n_array, self._image_data)
         self._image_data.Modified()
         #
         img_origin = self._image_data.GetOrigin()
@@ -1163,7 +1176,7 @@ class ao_visualization():
     #
     DISPLAY_ATTRIBUTES = ('contour_visibility', 'contour_width', 'contour_color',
             'glyph_visibility', 'glyph_size', 'glyph_color',
-            'voronoi', 'voronoi_width', 'voronoi_color',
+            'voronoi', 'voronoi_width', 'voronoi_color', 'rotation',
             'interpolation', 'image_visibility', 'background_color',)
     @property
     def displaySettings(self):

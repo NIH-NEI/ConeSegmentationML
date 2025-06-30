@@ -202,10 +202,17 @@ If a cell contour length is less than this value, then the result is discarded.
             <tr>
                 <td><b>Ctrl+O</b></td>
                 <td><img src="../Icons/open.png" width=32 height=32 />&nbsp;Open</td>
-                <td>Open Split Image (.tif) and, optionally, Annotations (_contours.csv).
-                Displays a dialog where you can select source image directory, annotations directory,
-                and check images that you want to open. Anntotations files are automatically matched
-                with the image files on file name without &ldquo;.tif&rdquo; or &ldquo;_contours.csv&rdquo;.</td>
+                <td><div>Open Split Image (.tif) and, optionally, Annotations (_contours.csv).
+                		Displays a dialog where you can select source image directory, annotations directory,
+                		and check images that you want to open. Anntotations files are automatically matched
+                		with the image files on file name without &ldquo;.tif&rdquo; or &ldquo;_contours.csv&rdquo;.</div>
+                		<div>The icons are green if the images have accompanying *_contours.csv annotation files saved
+                		in the same directories as the images.</div>
+                		<div>Images that have a 	<img src="../Icons/squareplusgray.png" width=16 height=16 /> icon are 3D image stacks. 
+                		Wnen you double-click or press <b>Enter</b> on one of these names, a list of frames from this stack is displayed
+                		in place of the image list. You can check/uncheck some frames to exclude them from the automatic processing.
+                		To go back to the list of images, double-click or press <b>Enter</b> on the image name in the header.</div>
+                </td>
             </tr>
             <tr>
                 <td><b>Ctrl+L</b></td>
@@ -287,6 +294,15 @@ If a cell contour length is less than this value, then the result is discarded.
                 <td>
                 	Toggle contour smoothing. If it is checked, a smoothing algorithm is automatically applied
                 	to added or edited contours.
+                </td>
+            </tr>
+            <tr>
+                <td><b>Ctrl+R</b></td>
+                <td>Contour&nbsp;Rotation</td>
+                <td>
+                	Toggle contour rotation when editing. If it is checked, the resize box around a contour
+                	in the &ldquo;Edit&rdquo; mode has hot areas for rotation. If you find these hot areas inconvenient
+                	because they interfere with other resizing operations, uncheck this option to switch off rotation.
                 </td>
             </tr>
             <tr>

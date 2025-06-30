@@ -9,7 +9,7 @@ from scipy.spatial import Voronoi
 import SimpleITK as sitk
 from PyQt5 import QtCore, QtWidgets, QtGui
 
-from AODisplay import AoColorButton, ao_display_settings
+from AODisplay import AoColorButton, ao_display_settings_dlg
 from AOUtil import SegmentClipper, contourCenter
 
 class ao_snap_dialog(QtWidgets.QDialog):
@@ -37,7 +37,7 @@ class ao_snap_dialog(QtWidgets.QDialog):
         self.voronoi_segments = []
         #
         self._setup_layout()
-        self._dsp_dlg = ao_display_settings(self)
+        self._dsp_dlg = ao_display_settings_dlg(self)
         #
         self._dsp_dlg.changed.connect(self._on_display_settings)
         self._mute = False
