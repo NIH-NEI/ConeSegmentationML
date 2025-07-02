@@ -1,5 +1,5 @@
 #### Version 1.3.0 (2025-07-02) ####
-- Alt+Left Click in Add/Move mouse modes erases markers (instead of Ctrl+Left Click).
+- Alt+Left Click in Draw/Edit mouse modes erases markers (instead of Ctrl+Left Click).
 
 #### Version 1.3.0 (2025-06-16) ####
 - Added possibility to open 3D image stacks. They are marked with a different icon in the list of open files,
