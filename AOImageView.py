@@ -35,10 +35,11 @@ class MouseOp(enum.IntEnum):
     EditContour = 2
     EraseSingle = 3
     EraseMulti = 4
+    Nop = 5
 
 class AnnotationInteractor(vtk.vtkInteractorStyleImage):
     def __init__(self, mouse_mode = MouseOp.Normal, parent=None):
-        self._win = platform.system().lower() == 'windows'
+        #self._win = platform.system().lower() == 'windows'
         self._mouse_mode = mouse_mode
         self.parent = parent
         self.mainWin = None if self.parent is None else self.parent.parent
@@ -92,10 +93,10 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         return[[pt[0]/s[0]-o[0], pt[1]/s[1]-o[1]] for pt in self._contour_pts]
     #
     def _GetControlKey(self):
-        # Check for either Ctrl or Alt (Ctrl+mouse does not work on Mac)
-        if self.GetInteractor().GetControlKey():
+        # Check for Ctrl/Alt key down for mouse mode override
+        if self.GetInteractor().GetAltKey():
             return True
-        return not self._win and self._alt_down
+        return self._alt_down
     def leftButtonPressEvent(self, obj, event):
         if self._skip_mouse: return
         while QtWidgets.QApplication.overrideCursor():
@@ -117,7 +118,7 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         op = self.mouse_mode
         if self._GetControlKey() and op in (MouseOp.DrawContour, MouseOp.EditContour):
             op = MouseOp.EraseSingle
-            self._ctrl_down = True
+            self._alt_down = True
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CrossCursor)
         if op in (MouseOp.DrawContour, MouseOp.EraseMulti, MouseOp.EraseSingle, MouseOp.EditContour):
             if op == MouseOp.EditContour:
@@ -152,7 +153,7 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         op = self.mouse_mode
         if self._GetControlKey() and op in (MouseOp.DrawContour, MouseOp.EditContour):
             op = MouseOp.EraseSingle
-            self._ctrl_down = True
+            self._alt_down = True
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CrossCursor)
         if op == MouseOp.EraseSingle:
             return
@@ -197,7 +198,7 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
             inter = self.GetInteractor()
             op = self.mouse_mode
             if self._GetControlKey() and op in (MouseOp.DrawContour, MouseOp.EditContour):
-                op = MouseOp.EraseSingle
+                op = MouseOp.Nop
             if op in (MouseOp.DrawContour, MouseOp.EraseMulti, MouseOp.EraseSingle):
                 mx, my = inter.GetEventPosition()
                 pick_value = inter.GetPicker().Pick(mx, my, 0, self.GetDefaultRenderer())
@@ -251,17 +252,17 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
             self._mouse_in = True
             if self._shift_down:
                 QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.OpenHandCursor)
-            elif self._ctrl_down and self.mouse_mode in (MouseOp.DrawContour, MouseOp.EditContour):
+            if self._GetControlKey() and self.mouse_mode in (MouseOp.DrawContour, MouseOp.EditContour):
+                self._alt_down = True
                 QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CrossCursor)
         else:
             # If a second OnEnter() received without a matching OnLeave(),
             # the QVTKWidget does not have keyboard focus and it won't receive OnKeyUp() for Shift either.
             # Like the user tried to drag the mouse from another widget while holding Shift down.
-            self._shift_down = self._ctrl_down = False
+            self._shift_down = self._alt_down = False
         obj.OnEnter()
     def leaveEvent(self, obj, event):
         self._mouse_in = False
-        self._alt_down = False
         while QtWidgets.QApplication.overrideCursor():
             QtWidgets.QApplication.restoreOverrideCursor()
         obj.OnLeave()
@@ -269,9 +270,6 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         while QtWidgets.QApplication.overrideCursor():
             QtWidgets.QApplication.restoreOverrideCursor()
         key = self.GetInteractor().GetKeySym()
-        if key == 'Alt_L':
-            self._alt_down = True
-            if not self._win: key = 'Control_L'
         if key == 'Up':
             if not self.mainWin is None:
                 self.mainWin.previous_image()
@@ -290,25 +288,23 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         elif key == 'Control_L':
             if self.mouse_mode == MouseOp.EditContour:
                 self.parent.cancel_editing()
+        elif key == 'Alt_L':
+            self._alt_down = True
+            if self.mouse_mode == MouseOp.EditContour:
+                self.parent.cancel_editing()
             if self.mouse_mode in (MouseOp.DrawContour, MouseOp.EditContour):
-                self._ctrl_down = True
                 QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CrossCursor)
-                return
-        if not self._alt_down:
-            obj.OnKeyPress()
+        obj.OnKeyPress()
     def keyReleaseEvent(self, obj, event):
         while QtWidgets.QApplication.overrideCursor():
             QtWidgets.QApplication.restoreOverrideCursor()
         key = self.GetInteractor().GetKeySym()
-        if key == 'Alt_L':
-            self._alt_down = False
-            if not self._win: key = 'Control_L'
         if (key == 'Up' or key == 'Down'):
             return
-        if self._ctrl_down:
-            if key == 'Control_L':
-                self._ctrl_down = False
-                return
+        if key == 'Alt_L':
+            self._alt_down = False
+        if key == 'Control_L':
+            self._ctrl_down = False
         if key == 'Shift_L':
             self._shift_down = False
         obj.OnKeyRelease()
@@ -657,6 +653,9 @@ class ao_visualization():
         self._interpolation = True
         self._voronoi = False
         self._image_visibility = True
+    #
+    def alt_reset(self):
+        self._style._alt_down = False
     #
     def _on_edited_contour(self, obj, event):
         if self.edit_idx is None or self.parent is None:
