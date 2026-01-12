@@ -1,7 +1,7 @@
 # Cone Segmentation ML (Machine Learning edition)
 #### Cell segmentation on Adaptive Optics Retinal Images using pre-trained A-GAN machine learning model and manual editing.
 
-*Jianfei Liu (NEI/NIH), Andrei Volkov (NEI/NIH Contractor), and Johnny Tam (NEI/NIH), with research support from the Intramural Research Program of the National Institutes of Health.*
+*If any portion of this code is used, please cite the following paper in your publication:*
 
 ### BibTeX
 
@@ -15,13 +15,51 @@
 		pages={2820-2831},
 		doi={10.1109/TMI.2021.3055483}
 	}
-	
-<img src="assets/main_ui.png" width="611" height="360" />
-<img src="assets/editing.png" width="491" height="360" />
 
 ---------------
 
-## Setting up development environment
+## Getting Started
+
+There are two ways to use the software:
+
+- Option 1: Run using prebuilt executables (No installation required)
+- Option 2: Install Dependencies and Run from Source
+
+## Option 1: Run using prebuilt executables
+
+1. Download the executable file (.exe for Windows and .dmg for macOS) from the **Releases** section with the Latest tag.
+
+2. Install the executable file.
+
+3. Once installed, double click on the software icon to open the software.
+
+   <img src="assets/ConeSegML1.png" width="860" height="600" />
+
+   
+
+4. Click on the **Open** button, to load the input cone image.
+
+   <img src="assets/ConeSegMLOpen2.png" width="860" height="600" />
+
+5. Then click on the **Segment** button to automatically detect the cones.
+
+   <img src="assets/ConeSegMLSegment3.png" width="860" height="600" />
+
+6. The **Mark**, **Erase S**, **Erase M** and **Undo** button allows to add, erase single/multiple and undo past operations.
+
+7. The **Settings** tab provides options to display the centroids of the cones and also highlight the individual cone regions along with the contours.
+
+   <img src="assets/ConeSegMLSettings4.png" width="860" height="600" />
+
+   <img src="assets/ConeSegMLSettings5.png" width="860" height="600" />
+
+8. The **Save** button saves the .CSV file with the contains a sequence of *(x, y)* coordinate pairs that trace the closed contour of the individual cones.
+
+9. The **Help** button provides more documentation about the software features including a table of keyboard shortcuts for common actions
+
+## Option 2: Install Dependencies and Run from Source
+
+### Setting up development environment
 
 1. Download and install [Miniconda](https://docs.conda.io/en/latest/miniconda.html) or [Anaconda](https://www.anaconda.com/products/individual).
 
@@ -55,7 +93,7 @@ In MacOS systems, you can build a Mac application instead:
 
 The result is `<prefix>/ConeSegmentationML/dist/ConeSegmentationML.app`.
 
-## Creating Windows installer using NSIS
+### Creating Windows installer using NSIS
 
 1. Download and install [NSIS](https://nsis.sourceforge.io/Download) if you don't have it already.
 
@@ -72,7 +110,7 @@ If successful, the result is `<prefix>/ConeSegmentationML/dist/ConeSegmentationM
 
 <img src="assets/wininstall.png" width="463" height="360" />
 
-## Creating MAC OS installer (.dmg)
+### Creating MAC OS installer (.dmg)
 
 1. Make sure *Xcode* is installed (normally, via Apple App Store).
 
@@ -100,7 +138,7 @@ You can run the app by double-clicking on the icon, or copy it to your Applicati
 
 ---------------
 
-## Deleting Conda Virtual Environment
+### Deleting Conda Virtual Environment
 
 To delete the Virtual environment at the Conda prompt, deactivate it first if it is active:
 
@@ -109,4 +147,3 @@ To delete the Virtual environment at the Conda prompt, deactivate it first if it
 then type:
 
 `conda remove --name ConeSegmentation`
-   
