@@ -39,8 +39,6 @@ There are two ways to use the software:
 
    <img src="assets/ConeSegML1.png" width="860" height="600" />
 
-   
-
 4. Click on the **Open** button, to load the input cone image.
 
    <img src="assets/ConeSegMLOpen2.png" width="860" height="600" />
@@ -49,7 +47,7 @@ There are two ways to use the software:
 
    <img src="assets/ConeSegMLSegment3.png" width="860" height="600" />
 
-6. The **Mark**, **Erase S**, **Erase M** and **Undo** button allows to add, erase single/multiple and undo past operations.
+6. The **Mark**, **Erase S**, **Erase M** and **Undo** buttons allow to add annotations, erase single/multiple annotations and undo past operation.
 
 7. The **Settings** tab provides options to display the centroids of the cones and also highlight the individual cone regions along with the contours.
 
@@ -57,9 +55,9 @@ There are two ways to use the software:
 
    <img src="assets/ConeSegMLSettings5.png" width="860" height="600" />
 
-8. The **Save** button saves the .CSV file with the contains a sequence of *(x, y)* coordinate pairs that trace the closed contour of the individual cones.
+8. The **Save** button saves the `.csv`  file which contains a sequence of *(x, y)* coordinate pairs that trace the closed contour of the individual cones.
 
-9. The **Help** button provides more documentation about the software features including a table of keyboard shortcuts for common actions
+9. The **Help** button provides more documentation about the software features including a table of keyboard shortcuts for common actions.
 
 ## Option 2: Install Dependencies and Run from Source
 
