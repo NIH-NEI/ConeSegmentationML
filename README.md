@@ -27,9 +27,13 @@ There are two ways to use the software:
 
 ## Option 1: Run using prebuilt executables
 
-1. Download the executable file (.exe for Windows and .dmg for macOS) from the **Releases** section with the Latest tag.
+1. Download the executable file ( `.exe` for Windows or `.dmg` for Mac OS) from the **Releases** section with the Latest tag.
 
-2. Install the executable file.
+2. On Windows systems, installation can be completed by double-clicking the `.exe` file and following the on-screen prompts. For Mac OS, the `.dmg` is a Mac OS disk image file.  When opened, it asks for accepting the license agreement, then mounts itself as an external drive and opens a Finder window, that looks like this:
+
+   <img src="assets/macinstall.png" />
+
+   You can run the app by double-clicking on the icon, or copying it to your Applications folder by dragging the icon over "Applications". Once ConeSegmentationML is in your Applications folder, you can eject the *ConeSegmentationML* disk, and delete the `.dmg` file.
 
 3. Once installed, double click on the software icon to open the software.
 
