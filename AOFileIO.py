@@ -88,7 +88,7 @@ class ao_fileIO():
                         wrong += 1
             acount += len(contours)
             if acount == 0 and wrong > 0:
-                raise RuntimeError('Wrong CSV format')  
+                raise RuntimeError('Wrong CSV format')
         except Exception as ex:
             aa = None
         if aa is None:
@@ -100,17 +100,17 @@ class ao_fileIO():
                 with open(jpath, 'rt') as fi:
                     data = json.load(fi)
                     contours = MetaList([marker['contours'] for marker in data['markers']])
-                    contours.meta.addmeta(MetaRecord(), setdefault=True)
+                    # contours.meta.addmeta(MetaRecord(), setdefault=True)
                     return {0:contours}
             except Exception:
-                #pass    
+                #pass
                 if ignore_errors:
                     aa = {0:MetaList([])}
                 else:
                     raise ex
-        for fr, contours in aa.items():
-            if hasattr(contours, 'meta'):
-                contours.meta.addmeta(MetaRecord(), setdefault=True)
+        # for fr, contours in aa.items():
+        #     if hasattr(contours, 'meta'):
+        #         contours.meta.addmeta(MetaRecord(), setdefault=True)
         return aa
     #
     def _write_contour_to_fileobj(self, contour_file, all_pts, img_origin, img_spacing):
@@ -179,7 +179,7 @@ class ao_fileIO():
     #         self.write_contour(contour_path, contours, img.GetOrigin(), img.GetSpacing())
     #         cnt += 1
     #     return cnt
-    
+
     # def write_contour_extras(self, dir_name, input_data, xoptions):
     #     for (img_name, img, contours) in zip(input_data['image names'], input_data['images'],
     #                                     input_data['contours']):

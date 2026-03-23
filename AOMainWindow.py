@@ -131,11 +131,12 @@ class AODirectoryDialog(QtWidgets.QFileDialog):
 #
 
 class InputImageData(object):
-    def __init__(self, img_fpath, itk_img):
+    def __init__(self, img_fpath, itk_img, flat=True):
         self.itk_img = itk_img
         self.filepath = img_fpath
         self._name = os.path.splitext(os.path.basename(self.filepath))[0]
         self.color = (127.5, 255.)
+        self.flat = flat
         #
         self.imgsz = self.itk_img.GetSize()
         self.ndim = len(self.imgsz)
@@ -190,13 +191,15 @@ class InputImageData(object):
     #
     @property
     def annotations(self):
-        ann = self.all_annotations[self.cframe]
+        fr = 0 if self.flat else self.cframe
+        ann = self.all_annotations[fr]
         if ann is None:
-            ann = self.all_annotations[self.cframe] = MetaList()
+            ann = self.all_annotations[fr] = MetaList()
         return ann
     @annotations.setter
     def annotations(self, v):
-        self.all_annotations[self.cframe] = v
+        fr = 0 if self.flat else self.cframe
+        self.all_annotations[fr] = v
     #
     @property
     def is_annotated(self):
@@ -234,11 +237,21 @@ class InputImageData(object):
             ann = aa.get(fr)
             if isinstance(ann, tuple):
                 ann = list(ann)
-            self.all_annotations[fr] = ann
+            if self.flat:
+                if not self.all_annotations[0]:
+                    self.all_annotations[0] = ann
+                else:
+                    self.add_all(self.all_annotations[0], ann)
+            else:
+                self.all_annotations[fr] = ann
         if 'unchecked' in aa:
             self._unchecked.clear()
             for fr in aa['unchecked']:
                 self._unchecked.add(fr)
+        #
+        for mc in self.all_annotations:
+            if not mc is None and hasattr(mc, 'meta'):
+                mc.meta.addmeta(MetaRecord(), setdefault=True)
     #
     def exportAnnotations(self):
         res = {}
@@ -259,12 +272,33 @@ class InputImageData(object):
     def aclear(self):
         self.all_annotations = [None for _ in range(self.nframes)]
     #
+    @staticmethod
+    def can_add(annotations, addann):
+        for ann in annotations:
+            if isIntersected(ann, addann):
+                return False
+        return True
+    #
+    @staticmethod
+    def add_all(annotations, addanns):
+        if not addanns: return
+        for addann in addanns:
+            if InputImageData.can_add(annotations, addann):
+                annotations.append(addann)
+    #
+
 
 class EnterListWidget(QtWidgets.QListWidget):
     def keyPressEvent(self, event: QtGui.QKeyEvent):
         if event.key() == QtCore.Qt.Key_Enter or event.key() == QtCore.Qt.Key_Return:
             if self.currentItem():
                 self.itemDoubleClicked.emit(self.currentItem())
+        elif event.key() == QtCore.Qt.Key_Left:
+            if self.currentRow() > 0:
+                self.setCurrentRow(self.currentRow() - 1)
+        elif event.key() == QtCore.Qt.Key_Right:
+            if self.currentRow() < self.count() - 1:
+                self.setCurrentRow(self.currentRow() + 1)
         else:
             super().keyPressEvent(event)
 #
@@ -272,7 +306,7 @@ class EnterListWidget(QtWidgets.QListWidget):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
-        
+
         self.setWindowIcon(qt_icon('ConeSegmentationML.png'))
 
         self._mute = True
@@ -280,7 +314,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._cur_img_id = -1
         self._cur_3d = None
         self._status_id = -1
-        
+
         self._icon_map = dict([
             (IMG_ICON_2D, qt_icon('circlegray')),
             (IMG_ICON_2D | IMG_ICON_ANN, qt_icon('circlegreen')),
@@ -289,7 +323,7 @@ class MainWindow(QtWidgets.QMainWindow):
             (IMG_ICON_OPEN, qt_icon('squareminus')),
             (IMG_ICON_OPEN | IMG_ICON_ANN, qt_icon('squareminus'))
         ])
-        
+
         self.loadDir = QtCore.QDir.home()
         self.saveDir = QtCore.QDir.home()
         self.xoptions = {}
@@ -301,16 +335,16 @@ class MainWindow(QtWidgets.QMainWindow):
             os.mkdir(self.state_dir)
         self.state_file = os.path.join(self.state_dir, 'state.json')
         self.shortcuts_file = os.path.join(self.state_dir, 'shortcuts.json')
-        
+
         #create backup directory
         self.hist = cfg.HistoryManager(self.state_dir, suffix='_contours.csv', retention_days=365)
-            
+
         self._undo_buf = []
 
         self.setWindowTitle(cfg.APP_NAME+' ver. '+cfg.APP_VERSION)
         geom = QtWidgets.QApplication.primaryScreen().geometry()
         self.setMinimumSize(geom.width()*60/100, geom.height()*65/100)
-        
+
         self.resize(geom.width()*70/100, geom.height()*70/100)
         self.move(geom.width()*12/100, geom.height()*10/100)
 
@@ -536,7 +570,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         flist_layout = Qt.QVBoxLayout()
         flist_layout.addWidget(self._file_list, 4)
-        
+
         self.vtkWinWidget = QtWidgets.QWidget(self)
         vtk_layout = Qt.QVBoxLayout()
         self.vtkWinWidget.setLayout(vtk_layout)
@@ -570,11 +604,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.iter_btn.setToolTip('Freeze current set of annotations, purge the rest')
         ctl_layout.addWidget(self.iter_btn, 0, 3)
         self.iter_btn.clicked.connect(self.onIterFreeze)
-        
+
         self.visible_x = [iter_lb, self.iter_sl, self.iter_txt, self.iter_btn]
         for o in self.visible_x:
             o.setVisible(False)
-        
+
         view_layout.addLayout(ctl_layout, 1, 0, 1, 2)
 
         self._iter_slider_status()
@@ -619,7 +653,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.quit_act = QtWidgets.QAction('Exit', self, shortcut=QtGui.QKeySequence.Quit,
                      toolTip="Quit the application", triggered=self._quit)
-        
+
         self.experimental_act = QtWidgets.QAction('Multiple Levelset Iterations', self,
                 checkable=True, checked=False,
                 statusTip='Enable multiple values for the Levelset Iterations segmentation parameter',
@@ -671,11 +705,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 statusTip='Toggle Brightness/Contrast Window [F3]',
                 checkable=True, checked=False,
                 triggered=self._toggle_brightness_contrast)
-        
+
         self.disp_act = QtWidgets.QAction('Display Settings...', iconText='Settings', shortcut='F5',
                 icon=qt_icon('settings'), toolTip='Change Display Settings [F5]',
                 triggered=self._show_display_settings)
-        
+
         self.meta_act = QtWidgets.QAction('Annotation Sources...', shortcut='F6',
                 toolTip='Highlight select annotation sources [F6]',
                 triggered=self._select_annotation_sources)
@@ -705,7 +739,7 @@ class MainWindow(QtWidgets.QMainWindow):
         view_menu.addSeparator()
         view_menu.addAction(self.data_loc_act)
         view_menu.addAction(self.reset_brightness_contrast)
-        
+
         opt_menu = self.menuBar().addMenu("&Options")
         self.smooth_act = QtWidgets.QAction('Smooth Annotations', shortcut='Ctrl+T',
                 toolTip='Apply Smmothing Splines to manually added or edited annotations [Ctrl+T]',
@@ -727,7 +761,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     toolTip='Display help on keyboard and mouse controls [F1]',
                     statusTip='Display help on keyboard and mouse controls [F1]',
                     triggered=self._display_help)
-        
+
         help_menu = self.menuBar().addMenu("&Help")
         help_menu.addAction(self.about_act)
         help_menu.addAction(self.help_act)
@@ -784,10 +818,10 @@ class MainWindow(QtWidgets.QMainWindow):
         settings_bar = self.addToolBar("Settings")
         settings_bar.setToolButtonStyle(QtCore.Qt.ToolButtonTextUnderIcon);
         settings_bar.addAction(self.open_image_act)
-        
+
         settings_bar.addAction(self.save_data_act)
         settings_bar.addSeparator()
-        
+
         # Mouse Op button group
         mouse_group = QtWidgets.QActionGroup(self)
         self.default_act = QtWidgets.QAction('Adjust', mouse_group, shortcut='Ctrl+M',
@@ -816,7 +850,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 triggered=lambda: self._set_mouse_mode(MouseOp.EraseSingle))
         settings_bar.addAction(self.erase_single_act)
         settings_bar.addSeparator()
-        
+
         self.undo_act = QtWidgets.QAction('Undo', shortcut='Ctrl+Z',
                 icon=qt_icon('redo'), toolTip='Undo last operation [Ctrl+Z]',
                 triggered=self._undo)
@@ -851,25 +885,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self.helpWindow = helpWindow = QtWidgets.QWidget()
         helpWindow.setWindowTitle(cfg.APP_NAME)
         helpWindow.setWindowIcon(qt_icon('help'))
-        
+
         layout = Qt.QVBoxLayout()
         helpWindow.setLayout(layout)
-        
+
         helpBrowser = QtWidgets.QTextBrowser()
         helpBrowser.setOpenExternalLinks(True)
         layout.addWidget(helpBrowser)
-        
+
         helpFile = os.path.join(HELP_DIR, 'segmentml.html')
         if os.path.isfile(helpFile):
             url = QtCore.QUrl.fromLocalFile(helpFile)
             helpBrowser.setSource(url)
         else:
             helpBrowser.setText("Sorry, no help available at this time.")
-        
+
         geom = QtWidgets.QApplication.primaryScreen().geometry()
         helpWindow.setMinimumSize(geom.width() * 60 // 100, geom.height() * 56 // 100)
         helpWindow.move(geom.width() * 20 // 100, geom.height() * 14 // 100)
-        
+
         helpWindow.showNormal()
     #
     def _on_hotkey_act(self):
@@ -918,12 +952,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def onIterFreeze(self):
         try:
             contours = self._input_data[self._cur_img_id].annotations
-            
+
             if not askYesNo('Confirm',
                     'You are about to "freeze" current set of annotations by deleting alternatives.',
                     detail='This operation can not be undone. \nContinue?'):
                 return
-            
+
             self._input_data[self._cur_img_id].annotations = contours.contours
             self._set_contours(self._cur_img_id)
             self.SaveHistory()
@@ -999,10 +1033,10 @@ class MainWindow(QtWidgets.QMainWindow):
             imdat.hist_apath = self.hist.get_history_file(img_name)
             imdat.local_apath = self.hist.get_local_file(img_name)
             self._input_data.append(imdat)
-            
+
             if img_dir is None:
                 img_dir = os.path.abspath(os.path.dirname(img_name))
-            
+
             aa = {}
             save_hist = False
             if not no_ann:
@@ -1011,8 +1045,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 elif os.path.isfile(imdat.local_apath):
                     aa = self._file_io.read_contours(imdat.local_apath)
                     save_hist = True
+            imdat.aclear()
             imdat.importAnnotations(aa)
-                
+
             if save_hist:
                 self._file_io.write_contour(imdat.hist_apath, imdat.exportAnnotations(),
                         imdat.itk_img.GetOrigin(), imdat.itk_img.GetSpacing())
@@ -1048,7 +1083,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if bn.startswith(imdat.name):
                 return id
         return -1
-    #        
+    #
     def _open_contour_list(self, csv_filenames, strict=True):
         err_files = []
         for csv_file in csv_filenames:
@@ -1060,7 +1095,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 except Exception:
                     err_files.append(os.path.basename(csv_file))
                     continue
-                
+
+                imdat.aclear()
                 imdat.importAnnotations(aa)
                 self._file_io.write_contour(imdat.hist_apath, imdat.exportAnnotations(),
                                 imdat.itk_img.GetOrigin(), imdat.itk_img.GetSpacing())
@@ -1078,7 +1114,7 @@ class MainWindow(QtWidgets.QMainWindow):
         imdat = self._input_data[self._cur_img_id]
         #
         img_path = os.path.abspath(imdat.filepath)
-        self._data_loc_dlg.setPaths(imgdat.itk_img, img_path, imdat.local_apath, imdat.hist_apath)
+        self._data_loc_dlg.setPaths(imdat.itk_img, img_path, imdat.local_apath, imdat.hist_apath)
         self._data_loc_dlg.exec()
     #
     def next_image(self):
@@ -1188,7 +1224,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if res == QtWidgets.QDialog.Rejected:
             self._segmentation_para_dlg.state = sv_state
             return
-        
+
         c_rows = self._segmentation_para_dlg.checkedRows()
         self.saveState()
         progr_total = sum([self._input_data[row].countChecked() for row in c_rows])
@@ -1222,10 +1258,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         try:
             QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
-            
+
             for i, row in enumerate(c_rows):
                 imdat = self._input_data[row]
-                
+
                 aa = {}
                 if imdat.nframes > 1:
                     n_array = sitk.GetArrayFromImage(imdat.itk_img)
@@ -1243,13 +1279,14 @@ class MainWindow(QtWidgets.QMainWindow):
                     progr_cur += 1
                     self._progress_dlg.set_progress(float(progr_cur)/float(progr_total) * 100.)
                     QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
-                
+
+                imdat.aclear()
                 imdat.importAnnotations(aa)
                 self.SaveHistory(row)
-    
+
                 self._progress_dlg.set_progress( (i+1)*100. / float(len(c_rows)) )
                 QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
-    
+
             if not self._cur_img_id in c_rows:
                 self._file_list.setCurrentRow(c_rows[0])
             else:
@@ -1454,13 +1491,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 sdir = self.saveDir.canonicalPath()
             except Exception:
                 sdir = QtCore.QDir.homePath()
-                
+
             dlg = AODirectoryDialog(sdir, 'Select output directory')
             dlg.xoptions = self.xoptions
             dir_name = dlg.run()
-                
+
             #dir_name = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select saving directory', sdir)
-            
+
             if dir_name:
                 self.xoptions = dlg.xoptions
                 cnt = 0
@@ -1501,7 +1538,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _quit(self, event):
         self.close()
-        
+
     def _toggle_visibility(self):
         if not self._mute:
             self._image_view.visibility = self.toggle_visibility.isChecked()
@@ -1582,7 +1619,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._image_view.visibility = True
         self._sync_display_controls()
         self._image_view.reset_view()
-        
+
         if not hasattr(self, 'srcwin'):
             self.srcwin = ao_source_window(self)
         self.srcwin.setMetaList(contours)
@@ -1635,7 +1672,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     'Select Export directory', sdir)
             if not dir_name:
                 return
-            
+
             cnt = self._file_io.write_annotation_stats(dir_name, self._input_data)
             self.status('%d Annotation Tracker Statistics file(s) exported to %s' % (cnt, dir_name))
             #self._update_listwidget(self._input_data['image file paths'], newlist=False)

@@ -38,6 +38,7 @@ class MouseOp(enum.IntEnum):
     Nop = 5
 
 class AnnotationInteractor(vtk.vtkInteractorStyleImage):
+    zoom_factor = 1.5
     def __init__(self, mouse_mode = MouseOp.Normal, parent=None):
         #self._win = platform.system().lower() == 'windows'
         self._mouse_mode = mouse_mode
@@ -54,6 +55,11 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         self.AddObserver("LeaveEvent", self.leaveEvent)
         self.AddObserver("KeyPressEvent", self.keyPressEvent)
         self.AddObserver("KeyReleaseEvent", self.keyReleaseEvent)
+        if not parent is None:
+            self.AddObserver("MouseWheelForwardEvent", self.mouseWheelForwardEvent)
+            self.AddObserver("MouseWheelBackwardEvent", self.mouseWheelBackwardEvent)
+        self._picker = vtk.vtkPropPicker()
+
         self._tolerance = 0.
         #
         self._skip_mouse = False
@@ -68,13 +74,119 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         #
         self.ci = (127.5, 255.)
     #
+    def _pick_image_point(self, x, y):
+        """
+        Return world coordinates of the point on the image actor under
+        display position (x, y). Returns None if nothing is picked.
+        """
+        renderer = self.GetDefaultRenderer()
+        actor = self.parent._image_actor
+
+        if renderer is None:
+            return None
+
+        ok = self._picker.Pick(x, y, 0, renderer)
+        if not ok:
+            return None
+
+        return self._picker.GetPickPosition()
+    #
+    def _translate_camera(self, delta):
+        renderer = self.GetDefaultRenderer()
+        if renderer is None:
+            return
+
+        camera = renderer.GetActiveCamera()
+
+        fp = list(camera.GetFocalPoint())
+        pos = list(camera.GetPosition())
+
+        camera.SetFocalPoint(fp[0] + delta[0], fp[1] + delta[1], fp[2] + delta[2])
+        camera.SetPosition(pos[0] + delta[0], pos[1] + delta[1], pos[2] + delta[2])
+    #
+    def _zoom_about_mouse(self, forward=True):
+        interactor = self.GetInteractor()
+        renderer = self.GetDefaultRenderer()
+
+        if interactor is None or renderer is None:
+            return
+
+        camera = renderer.GetActiveCamera()
+        x, y = interactor.GetEventPosition()
+
+        # Pick before
+        p_before = self._pick_image_point(x, y)
+
+        # Zoom
+        new_scale = scale = camera.GetParallelScale()
+        if forward:
+            if scale > 2.:
+                new_scale = scale / AnnotationInteractor.zoom_factor
+        else:
+            if scale < 1000.:
+                new_scale = scale * AnnotationInteractor.zoom_factor
+
+        camera.SetParallelScale(new_scale)
+
+        # --- Compute whether image is "small" ---
+        actor = self.parent._image_actor
+        bounds = actor.GetBounds()  # (xmin,xmax, ymin,ymax, zmin,zmax)
+
+        img_width = bounds[1] - bounds[0]
+        img_height = bounds[3] - bounds[2]
+
+        # Visible height in world coords = 2 * ParallelScale
+        view_height = 2 * new_scale
+
+        # Aspect ratio correction for width
+        size = renderer.GetSize()
+        aspect = size[0] / size[1] if size[1] != 0 else 1.0
+        view_width = view_height * aspect
+
+        # Condition: image fits well inside viewport
+        if img_width < view_width * 0.25 and img_height < view_height * 0.25:
+            # --- Center image ---
+            cx = 0.5 * (bounds[0] + bounds[1])
+            cy = 0.5 * (bounds[2] + bounds[3])
+            cz = 0.5 * (bounds[4] + bounds[5])
+
+            fp = list(camera.GetFocalPoint())
+            pos = list(camera.GetPosition())
+
+            dx = cx - fp[0]
+            dy = cy - fp[1]
+            dz = cz - fp[2]
+
+            camera.SetFocalPoint(cx, cy, cz)
+            camera.SetPosition(pos[0] + dx, pos[1] + dy, pos[2] + dz)
+
+        else:
+            # --- Normal cursor-anchored behavior ---
+            p_after = self._pick_image_point(x, y)
+
+            if p_before is not None and p_after is not None:
+                delta = (
+                    p_before[0] - p_after[0],
+                    p_before[1] - p_after[1],
+                    p_before[2] - p_after[2],
+                )
+                self._translate_camera(delta)
+
+        interactor.Render()
+    #
+    def mouseWheelForwardEvent(self, obj, event):
+        self._zoom_about_mouse(forward=True)
+    #
+    def mouseWheelBackwardEvent(self, obj, event):
+        self._zoom_about_mouse(forward=False)
+    #
     @property
     def tolerance(self):
         return self._tolerance
     @tolerance.setter
     def tolerance(self, val):
         self._tolerance = val
-    #   
+    #
     @property
     def mouse_mode(self):
         return self._mouse_mode
@@ -270,11 +382,11 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         while QtWidgets.QApplication.overrideCursor():
             QtWidgets.QApplication.restoreOverrideCursor()
         key = self.GetInteractor().GetKeySym()
-        if key == 'Up':
+        if key == 'Up' or key == 'Left':
             if not self.mainWin is None:
                 self.mainWin.previous_image()
             return
-        elif key == 'Down':
+        elif key == 'Down' or key == 'Right':
             if not self.mainWin is None:
                 self.mainWin.next_image()
             return
@@ -299,7 +411,7 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
         while QtWidgets.QApplication.overrideCursor():
             QtWidgets.QApplication.restoreOverrideCursor()
         key = self.GetInteractor().GetKeySym()
-        if (key == 'Up' or key == 'Down'):
+        if key in ('Up', 'Down', 'Left', 'Right'):
             return
         if key == 'Alt_L':
             self._alt_down = False
@@ -309,7 +421,7 @@ class AnnotationInteractor(vtk.vtkInteractorStyleImage):
             self._shift_down = False
         obj.OnKeyRelease()
     #
-    
+
 class ao_resize_box():
     CURSORS = [QtCore.Qt.ArrowCursor,
                QtCore.Qt.SizeFDiagCursor, QtCore.Qt.SizeVerCursor, QtCore.Qt.SizeBDiagCursor,
@@ -541,10 +653,10 @@ class ao_resize_box():
         s = self.vis.spacing
         xmid = (xmin + xmax) / 2.
         ymid = (ymin + ymax) / 2.
-        
+
         self.Initialize()
         self._box_actor.SetVisibility(True)
-        
+
         self._box_pts = [[xmin, ymin], [xmid, ymin], [xmax, ymin],
                 [xmax, ymid],
                 [xmax, ymax], [xmid, ymax], [xmin, ymax],
@@ -585,7 +697,7 @@ class ao_resize_box():
         self.Initialize()
         self.Modified()
     #
-    
+
 class ao_visualization():
     def __init__(self, vtk_widget, parent=None):
         self._vtk_widget = vtk_widget
@@ -601,18 +713,18 @@ class ao_visualization():
         self._interactive_contour_width = 3
         self._edited_contour_width = 3
         self._voronoi_contour_width = 1.5
-        
+
         self._min_color_level = -256.
         self._max_color_level = 512.
         self._min_color_window = 0.1
         self._max_color_window = 4096.
-        
+
         self._draw_contours()
         self._draw_interactive_contours()
         self._draw_edited_contours()
         self._draw_voronoi_contours()
         self._draw_background_region()
-        
+
         self._resize_box = ao_resize_box()
         #
         self._render = vtk.vtkRenderer()
@@ -625,28 +737,28 @@ class ao_visualization():
         self._render.AddActor(self._voronoi_contour_actor)
 
         self._vtk_widget.GetRenderWindow().AddRenderer(self._render)
-        
+
         self._style = AnnotationInteractor(parent=self)
         self._style.SetDefaultRenderer(self._render)
         self._vtk_widget.SetInteractorStyle(self._style)
 
         iren = self._vtk_widget.GetRenderWindow().GetInteractor()
-        
+
         self._edited_contour_widget.SetInteractor(iren)
         self._edited_contour_widget.On()
         self._edited_contour_widget.Initialize()
         self._edited_contour_widget.Off()
         self._edited_contour_widget.AddObserver(vtk.vtkCommand.DisableEvent, self._on_edited_contour)
         self._edited_contour_widget.AddObserver(vtk.vtkCommand.InteractionEvent, self._on_interaction)
-        
+
         self._resize_box.hook(self)
         self._resize_box.AddObserver(vtk.vtkCommand.InteractionEvent, self._on_resize_box)
-        
+
         self._render.ResetCamera()
 
         iren.Initialize()
         iren.Start()
-        
+
         self._visibility = True
         self._contour_visibility = True
         self._glyph_visibility = False
@@ -719,7 +831,7 @@ class ao_visualization():
         self._gray_actor.GetProperty().SetColor(0.25, 0.25, 0.25)
         self._gray_actor.GetProperty().SetOpacity(0.75)
         self._gray_actor.GetProperty().SetLineWidth(self._contour_width)
-        
+
         self._annotated_points = vtk.vtkPoints()
         self._annotated_points.SetDataTypeToFloat()
         self._annotated_poly = vtk.vtkPolyData()
@@ -740,7 +852,7 @@ class ao_visualization():
         self._annotated_actor = vtk.vtkActor()
         self._annotated_actor.SetMapper(self._annotated_mapper)
         self._annotated_actor.GetProperty().SetColor(0, 1, 0)
-        
+
     def _draw_interactive_contours(self):
         self._interactive_contour_points = vtk.vtkPoints()
         self._interactive_contour_points.SetDataTypeToFloat()
@@ -757,7 +869,7 @@ class ao_visualization():
         self._interactive_contour_actor.SetMapper(self._interactive_contour_mapper)
         self._interactive_contour_actor.GetProperty().SetColor(217/255.0, 95.0/255.0, 14.0/255.0)
         self._interactive_contour_actor.GetProperty().SetLineWidth(self._interactive_contour_width)
-        
+
     def _draw_edited_contours(self):
         self._edited_contour_points = vtk.vtkPoints()
         self._edited_contour_points.SetDataTypeToFloat()
@@ -765,7 +877,7 @@ class ao_visualization():
         self._edited_contour_poly = vtk.vtkPolyData()
         self._edited_contour_poly.SetPoints(self._edited_contour_points)
         self._edited_contour_poly.SetLines(self._edited_contour_lines)
-        
+
         self._edited_contour_rep = rep = vtk.vtkOrientedGlyphContourRepresentation()
         rep.GetLinesProperty().SetColor(1., 1., 0.)
         rep.GetLinesProperty().SetLineWidth(self._edited_contour_width)
@@ -775,7 +887,7 @@ class ao_visualization():
         rep.GetProperty().SetColor(1., 0.5, 0.5)
         rep.SetLineInterpolator(vtk.vtkLinearContourLineInterpolator())
         rep.SetAlwaysOnTop(True)
-        
+
         self._edited_contour_widget = wid = vtk.vtkContourWidget()
         wid.SetRepresentation(rep)
     #
@@ -840,11 +952,11 @@ class ao_visualization():
         self._voronoi_contour_points.Initialize()
         self._voronoi_contour_lines.Initialize()
         self._voronoi_contour_poly.Modified()
-        
+
         self._bkg_points.Initialize()
         self._bkg_cells.Initialize()
         self._bkg_poly.Modified()
-        
+
         self._resize_box.Initialize()
         self._resize_box.Modified()
     #
@@ -930,7 +1042,7 @@ class ao_visualization():
         self._annotated_points.Initialize()
         img_origin = self.origin
         img_spacing = self.spacing
-        
+
         gray_contours = []
 
         self._contour_centers = []
@@ -947,7 +1059,7 @@ class ao_visualization():
                 continue
             if len(pts) == 0:
                 continue
-            
+
             if hasattr(contour_pts, 'isGray') and contour_pts.isGray(_pts):
                 gray_contours.append(pts)
             else:
@@ -958,7 +1070,7 @@ class ao_visualization():
                 self._contour_points.InsertNextPoint(pt[0], pt[1], -0.001)
                 self._contour_lines.InsertCellPoint(id+start_index)
             self._contour_lines.InsertCellPoint(start_index)
-            
+
         for i, pts in enumerate(gray_contours):
             self._gray_lines.InsertNextCell(len(pts)+1)
             start_index = self._gray_points.GetNumberOfPoints()
@@ -1027,7 +1139,7 @@ class ao_visualization():
     def enable_edited_contour(self, pts, reset_view=True):
         o = self._image_data.GetOrigin()
         s = self._image_data.GetSpacing()
-        
+
         n = len(pts)
         self._edited_contour_points.Initialize()
         self._edited_contour_lines.Initialize()
@@ -1204,7 +1316,7 @@ class ao_visualization():
         self._image_actor.GetProperty().SetColorLevel(127.5)
         self._image_actor.GetProperty().SetColorWindow(255.)
         self._vtk_widget.GetRenderWindow().Render()
-    #    
+    #
     @property
     def color_info(self):
         p = self._image_actor.GetProperty()
