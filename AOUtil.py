@@ -1,5 +1,5 @@
 __all__ = ('datadir', 'UndoOp', 'UndoEntry', 'SegmentClipper', 'isPointInside', 'isIntersected',
-           'contourCenter', 'shoelaceArea',
+           'contourCenter', 'shoelaceArea', 'format_td',
            'findContour', 'optimizeContour', 'contourChanged', 'smoothContour', 'isTooSmall',)
 
 import sys, os, datetime
@@ -42,6 +42,14 @@ else:
             print(func.__name__+'() done in:', str(datetime.datetime.now()-start_ts))
             return rc
         return wrapper
+
+def format_td(td):
+    mksecs = int(td.microseconds / 100000.)
+    secs = int(td.seconds)
+    mins, secs = divmod(secs, 60)
+    hrs, mins = divmod(mins, 60)
+    return '%02d:%02d:%02d.%d' % (hrs, mins, secs, mksecs)
+
 
 @enum.unique
 class UndoOp(enum.IntEnum):
@@ -263,7 +271,7 @@ def _parameterizeContour(contour):
         rad = math.sqrt(rad/len(contour))
     res.sort(key=lambda x: x[2])
     return res, rad, xc, yc
-        
+
 # Smooth contour using Smoothing Splines
 # https://docs.scipy.org/doc/scipy/tutorial/interpolate/smoothing_splines.html
 def smoothContour(contour, min_dist=1.5, factor=0.5, clip=None):
@@ -272,34 +280,34 @@ def smoothContour(contour, min_dist=1.5, factor=0.5, clip=None):
         _pcont, rad, xc, yc = _parameterizeContour(contour)
         pcont = [(x, y, a-pi2) for x,y,a in _pcont[-5:]] + _pcont + \
             [(x, y, a+pi2) for x,y,a in _pcont[0:5]]
-        
+
         xx = [p[0]-xc for p in pcont]
         yy = [p[1]-yc for p in pcont]
         t = [p[2] for p in pcont]
-        
+
         npnew = int(4.*np.pi*rad)
         tnew = [j*pi2/npnew - np.pi for j in range(npnew)]
-        
+
         tck = interpolate.splrep(t, xx, s=1)
         xx = interpolate.splev(tnew, tck, der=0)
         tck = interpolate.splrep(t, yy, s=1)
         yy = interpolate.splev(tnew, tck, der=0)
-        
+
         _, rad1, dxc, dyc = _parameterizeContour([(x,y) for x,y in zip(xx,yy)])
         xc += dxc
         yc += dyc
         xx = [x-dxc for x in xx]
         yy = [y-dyc for y in yy]
-        
+
         t = [a-pi2 for a in tnew[-10:]] + tnew + [a+pi2 for a in tnew[0:10]]
         xx = xx[-10:] + xx + xx[0:10]
         yy = yy[-10:] + yy + yy[0:10]
-        
+
         tck = interpolate.splrep(t, xx, s=math.sqrt(npnew)*factor)
         xnew = interpolate.splev(tnew, tck, der=0)
         tck = interpolate.splrep(t, yy, s=math.sqrt(npnew)*factor)
         ynew = interpolate.splev(tnew, tck, der=0)
-        
+
         _cont = [(x,y) for x,y in zip(xnew,ynew)]
         rsq = rad1*rad1*9.
         pt0 = None
@@ -312,7 +320,7 @@ def smoothContour(contour, min_dist=1.5, factor=0.5, clip=None):
         _, rad2, dxc, dyc = _parameterizeContour(_cont)
         xc += 0.275
         sc = (rad1 + 0.075) / rad2
-        
+
         res = []
         res.append((xnew[0]*sc + xc, ynew[0]*sc + yc))
         for x, y in zip(xnew, ynew):

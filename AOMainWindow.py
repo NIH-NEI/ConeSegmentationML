@@ -1,5 +1,6 @@
 from __future__ import division
 import os, sys
+import datetime
 import json
 import vtk
 
@@ -1236,6 +1237,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not cur_segmentation_model:
             display_error('Input errors:', 'Missing Segmentation Model Weights!')
             return
+        start_ts = datetime.datetime.now()
         for fpath in cur_segmentation_model.values():
             mdir = os.path.dirname(fpath)
             self.status('Using Segmentation Model Weights from: '+mdir)
@@ -1292,6 +1294,8 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self._set_contours(self._cur_img_id)
                 self._image_view.reset_view()
+            elapsed = datetime.datetime.now() - start_ts
+            self.status(f'Processed {len(c_rows)} images in {format_td(elapsed)}')
         except Exception as ex:
             display_error('In Segment Cone Cells:', ex)
 

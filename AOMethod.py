@@ -16,6 +16,7 @@ from pathlib import Path
 from AONetwork import UNet
 from AOColoredGraph import buildRules, buildLookup, Rule, display, getFitness
 from AOMetaList import *
+from AOUtil import format_td
 import itk
 import math
 import datetime
@@ -373,22 +374,22 @@ class ao_method():
         cell_centroids = [stats.GetCentroid(l) for l in stats.GetLabels() if l != 0]
         cell_radius = [stats.GetEquivalentEllipsoidDiameter(l)[1]/2 for l in stats.GetLabels() if l!=0]
         return {'centroid': cell_centroids, 'radius': cell_radius, 'labels': cell_labels}
-    
+
     def _build_connection_graph(self, ws, cell_info):
         # Derived from C++ code with a few Python-esque optimizations
         ymax = ws.GetHeight() - 1
         xmax = ws.GetWidth() - 1
         conn_map = dict([(l, set()) for l in cell_info['labels']])
-        
+
         row0 = [ws.GetPixel(x,0) for x in range(ws.GetWidth())]
         for y in range(ymax):
             y1 = y + 1
             row1 = [ws.GetPixel(x, y1) for x in range(ws.GetWidth())]
             for x in range(xmax):
                 c00 = row0[x]
-                c01 = row0[x+1]             
-                c10 = row1[x]               
-                c11 = row1[x+1]             
+                c01 = row0[x+1]
+                c10 = row1[x]
+                c11 = row1[x+1]
                 if c00 != 0:
                     if c10 != 0 and c10 != c00:     # Up-Down
                         conn_map[c00].add(c10)
@@ -641,10 +642,11 @@ class ao_method():
         else:
             iteration_num = int(levelset_iterations)
             levelset_iterations = (iteration_num, iteration_num+1, 1)
-            
+
         method = os.path.basename(os.path.dirname(model_weights['contours']))
         kwarg = {'user':'=auto=', 'method':method, 'FOV':fov, 'MinLen':contour_length}
-            
+        main_start_ts = datetime.datetime.now()
+
         # training fov is 0.75, we need to compute fov ratio difference first
         fov_ratio = fov / 0.75
 
@@ -694,7 +696,7 @@ class ao_method():
         itk_centroid_binary_img, itk_region_binary_img = self._erase_cell_regions_without_centroids(
             itk_region_label_img, cell_centroids)
         watershed_seg = self._watershed_segmentation(itk_centroid_binary_img, itk_region_binary_img)
-        
+
         cell_info = self._extract_watershed_cell_regions(watershed_seg)
 
         # four-color labeling
@@ -703,6 +705,8 @@ class ao_method():
         color_keys, color_res, color_lut = self._color_map(connection_dict)
         itk_four_color_img = self._create_four_color_image(color_keys, color_res, color_lut, cell_info, watershed_seg)
         binary_masks = self._create_initial_binary_masks(itk_four_color_img, itk_region_binary_img)
+
+        main_elapsed = datetime.datetime.now() - main_start_ts
 
         # level-set segmentation
         res = MultiContourList()
@@ -716,10 +720,11 @@ class ao_method():
                 for pt in contour_pts:
                     pt[0] = pt[0] / fov_ratio
                     pt[1] = pt[1] / fov_ratio
+            elapsed = (datetime.datetime.now() - start_ts) + main_elapsed
+            kwarg['proc_time'] = format_td(elapsed)
             mc = MetaList(res_contours, meta=MetaMap(MetaRecord(**kwarg)))
             mc.meta.addmeta(MetaRecord(), setdefault=True)
             res.add_key(iteration_num, mc)
-            elapsed = datetime.datetime.now() - start_ts
             print('Extract %d cell contours at #iter=%d done in %s' % \
                   (len(res_contours), iteration_num, str(elapsed)))
 
