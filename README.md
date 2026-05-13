@@ -126,7 +126,7 @@ If successful, the result is `<prefix>/ConeSegmentationML/dist/ConeSegmentationM
 
 3. Follow steps 1 through 5 of *Setting up development environment* to setup the development environment.
 
-4. At the Conda prompt with *ConeSegmentation* activated, cd to `<prefix>/ConeSegmentationML` and type the command:
+4. At the Conda prompt with *AO_Segmentation* activated, cd to `<prefix>/ConeSegmentationML` and type the command:
 
 	`bash make_dmg.sh`
 
