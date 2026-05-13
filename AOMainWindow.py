@@ -344,10 +344,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.setWindowTitle(cfg.APP_NAME+' ver. '+cfg.APP_VERSION)
         geom = QtWidgets.QApplication.primaryScreen().geometry()
-        self.setMinimumSize(geom.width()*60/100, geom.height()*65/100)
+        self.setMinimumSize(geom.width()*60//100, geom.height()*65//100)
 
-        self.resize(geom.width()*70/100, geom.height()*70/100)
-        self.move(geom.width()*12/100, geom.height()*10/100)
+        self.resize(geom.width()*70//100, geom.height()*70//100)
+        self.move(geom.width()*12//100, geom.height()*10//100)
 
         self._setup_layout()
         self._setup_menu()
@@ -370,14 +370,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._display_settings_dlg.changed.connect(self._on_display_settings)
         self._display_settings_dlg.smoothChanged.connect(self._on_smooth_changed)
         self._progress_dlg = ao_progress_dialog(self)
-        self._progress_dlg.setMinimumWidth(geom.width()/5)
+        self._progress_dlg.setMinimumWidth(geom.width()//5)
         self._file_io = AOFileIO.ao_fileIO()
         self._segmentation = AOMethod.ao_method()
         #self._segmentation_models = self._segmentation.create_segmentation_models('model_weights')
         #self._segmentation_para_dlg.set_segmentation_weights(self._segmentation_models)
         #
         self._data_loc_dlg = ao_loc_dialog(self)
-        self._data_loc_dlg.setMinimumWidth(geom.width()/2)
+        self._data_loc_dlg.setMinimumWidth(geom.width()//2)
         #
         self._action_map = self.actionMap()
         self._default_key_map = self.hotkeys

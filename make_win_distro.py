@@ -2,7 +2,7 @@
 import os, sys
 import zipfile
 
-APP_VERSION = '1.3.1'
+APP_VERSION = '1.3.2'
 
 PREFIX = os.path.abspath(os.path.dirname(__file__))
 EXCLUDE_DIRS = ('__pycache__', 'build', 'dist',  'dist0', )

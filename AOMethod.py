@@ -1,9 +1,5 @@
 from skimage.transform import resize
-import keras
-from keras.models import Model
-from keras.layers import Input, add, concatenate, Conv2D, MaxPooling2D, Conv2DTranspose, BatchNormalization, Dropout
-from keras.layers.advanced_activations import LeakyReLU
-from keras import backend as K
+
 import tensorflow as tf
 from skimage.transform import resize
 import os
@@ -21,15 +17,18 @@ import itk
 import math
 import datetime
 import AOGenetic
-# import multiprocessing
 
 import multiprocessing as mp
+# Replace the old tf.ConfigProto/tf.Session block. TF2 uses eager execution by default.
 core_num = mp.cpu_count()
-config = tf.ConfigProto(
-    inter_op_parallelism_threads=core_num,
-    intra_op_parallelism_threads=core_num)
-config.gpu_options.allow_growth = True
-sess = tf.Session(config=config)
+tf.config.threading.set_inter_op_parallelism_threads(core_num)
+tf.config.threading.set_intra_op_parallelism_threads(core_num)
+for gpu in tf.config.list_physical_devices("GPU"):
+    try:
+        tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError:
+        # Memory growth must be set before GPU initialization; ignore if already initialized.
+        pass
 
 training_img_rows = 256
 training_img_cols = 256
@@ -198,7 +197,7 @@ class ao_method():
         prediction_model = self.create_unet_model(training_size=(training_img_rows, training_img_cols), output_class=1)
         prediction_model.load_weights(model_weights[model_type])
 
-        res_imgs = prediction_model.predict(np_normalized_imgs, verbose=1)
+        res_imgs = prediction_model.predict(np_normalized_imgs, verbose=0)
 
         if res_imgs.shape[-1] == 1:
             res_imgs = np.squeeze(res_imgs, axis=-1)

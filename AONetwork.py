@@ -1,7 +1,15 @@
-import keras
-from keras.models import Model
-from keras.layers import Input, Concatenate, Conv2D, MaxPooling2D, Conv2DTranspose, Dropout
-from keras import backend as K
+from tensorflow import keras
+from tensorflow.keras import backend as K
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import (
+    Input,
+    Concatenate,
+    Conv2D,
+    MaxPooling2D,
+    Conv2DTranspose,
+    Dropout,
+)
+
 
 def UNet(input_shape=(256, 256, 1), kernel_size=(3, 3), kernel_init='he_normal', output_class=1):
     n_ch_exps = [4, 5, 6, 7, 8, 9]

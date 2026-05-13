@@ -1,0 +1,12 @@
+h5py
+matplotlib
+numpy
+pyinstaller
+PyQt5
+PyQtWebEngine
+scikit-image
+scipy
+SimpleITK
+itk-filtering
+tensorflow
+vtk

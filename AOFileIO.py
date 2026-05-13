@@ -5,7 +5,6 @@ import math
 import io, codecs
 
 import numpy as np
-import imageio
 import SimpleITK as sitk
 
 from AOMetaList import *
@@ -23,11 +22,7 @@ class ao_fileIO():
         pass
 
     def read_image(self, img_name):
-        if isinstance(img_name, str):
-            itk_img = sitk.ReadImage(img_name)
-        else:
-            numpy_img = imageio.imread(img_name)
-            itk_img = sitk.GetImageFromArray(numpy_img)
+        itk_img = sitk.ReadImage(img_name)
         ndim = len(itk_img.GetSize())
         itk_img.SetOrigin([0]*ndim)
         itk_img.SetSpacing([1]*ndim)

@@ -103,10 +103,10 @@ class ao_progress_dialog(QtWidgets.QDialog):
         self.setLayout(hbox)
 
     def set_progress(self, val):
-        self._progressbar.setValue(val)
+        self._progressbar.setValue(int(val))
         QtWidgets.QApplication.processEvents()
 #
-        
+
 def _createSmallButton(txt, on_clicked=None):
     btn = QtWidgets.QPushButton(txt)
     btn.setStyleSheet('margin: 0; padding: 4 10 4 10;')
@@ -383,16 +383,16 @@ class ao_loc_dialog(QtWidgets.QDialog):
         self.local_txt = QtWidgets.QLineEdit('')
         self.local_txt.setReadOnly(True)
         view_layout.addWidget(self.local_txt, 3, 0)
-        
+
         hist_lab = QtWidgets.QLabel('Auto-backup (History) File:')
         view_layout.addWidget(hist_lab, 4, 0)
         self.hist_txt = QtWidgets.QLineEdit('')
         self.hist_txt.setReadOnly(True)
         view_layout.addWidget(self.hist_txt, 5, 0)
-        
+
         self.buttonbox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok)
         self.buttonbox.accepted.connect(self.accept)
-        
+
         view_layout.addWidget(self.buttonbox, 6, 0)
     #
     def hideEvent(self, e):
@@ -419,7 +419,7 @@ class ao_loc_dialog(QtWidgets.QDialog):
         self.local_txt.setPalette(pal)
         self.hist_txt.setText(hist_path)
     #
-    
+
 class TipLabel(QtWidgets.QLabel):
     def __init__(self, pixmap, msg):
         super(TipLabel, self).__init__()
@@ -453,7 +453,7 @@ select one of these files when prompted.'''
         self.save_geom = None
         #
         geom = QtWidgets.QApplication.primaryScreen().geometry()
-        self.resize(geom.width()*36/100, geom.height()*60/100)
+        self.resize(geom.width()*36//100, geom.height()*60//100)
         #
         self._extended = True
         self._mute = False
@@ -483,19 +483,19 @@ select one of these files when prompted.'''
     #
     def _setup_layout(self):
         self.setWindowTitle('Cone segmentation')
-        
+
         qmark = QtGui.QPixmap(os.path.join(ICONS_DIR, 'help_small.png'));
-        
+
         ml_panel = QtWidgets.QGroupBox('Machine Learning Model Weights')
         ml_layout = QtWidgets.QGridLayout()
         ml_panel.setLayout(ml_layout)
 
         self.rb_builtin = QtWidgets.QRadioButton('Built-in pre-trained')
         ml_layout.addWidget(self.rb_builtin, 0, 0)
-        
+
         self.cb_builtin = QtWidgets.QComboBox()
         ml_layout.addWidget(self.cb_builtin, 0, 1)
-        
+
         ml_q = TipLabel(qmark, self.TIP_MODEL_WEIGHTS)
         ml_layout.addWidget(ml_q, 0, 2)
         self.rb_custom = QtWidgets.QRadioButton('Custom')
@@ -506,7 +506,7 @@ select one of these files when prompted.'''
         self.btnBrowse = QtWidgets.QPushButton('Browse')
         ml_layout.addWidget(self.btnBrowse, 1, 2)
         self.rb_builtin.setChecked(True)
-        
+
         lb_ml_cur = QtWidgets.QLabel('Currently loaded:')
         lb_ml_cur.setAlignment(QtCore.Qt.AlignTop)
         ml_layout.addWidget(lb_ml_cur, 2, 0)
@@ -520,7 +520,7 @@ select one of these files when prompted.'''
         self._iteration_input_n = self._create_spin_box(200, r=(1, 10000), s=1)
         iteration_q_n = TipLabel(qmark, self.TIP_ITERATIONS)
         self.visible_n = [iteration_label_n, self._iteration_input_n, iteration_q_n]
-        
+
         # Extended/Advanced version controls
         iter_panel = QtWidgets.QGroupBox('Level-set iterations')
         iter_layout = QtWidgets.QGridLayout()
@@ -531,10 +531,10 @@ select one of these files when prompted.'''
         self.rb_range = QtWidgets.QRadioButton('Value range')
         iter_layout.addWidget(self.rb_range, 1, 0)
         self.rb_single.setChecked(True)
-        
+
         self._iteration_input_x = self._create_spin_box(200, r=(1, 10000), s=1)
         iter_layout.addWidget(self._iteration_input_x, 0, 1, 1, 2)
-        
+
         start_lb = QtWidgets.QLabel(' Start:')
         start_lb.setAlignment(QtCore.Qt.AlignRight)
         self._start_input = self._create_spin_box(50, r=(1, 10000), s=1)
@@ -542,7 +542,7 @@ select one of these files when prompted.'''
         self._end_input = self._create_spin_box(300, r=(1, 10000), s=1)
         step_lb = QtWidgets.QLabel(' Step:')
         self._step_input = self._create_spin_box(50, r=(5, 100), s=5)
-        
+
         iter_layout.addWidget(start_lb, 1, 1)
         iter_layout.addWidget(self._start_input, 1, 2)
         iter_layout.addWidget(end_lb, 1, 3)
@@ -561,7 +561,7 @@ select one of these files when prompted.'''
         self._cell_contour_length_input.setSingleStep(1)
         self._cell_contour_length_input.setValue(20)
         #self._cell_contour_length_input.setToolTip(self.TIP_CONTOUR_LENGTH)
-        
+
         cell_contour_length_q = TipLabel(qmark, self.TIP_CONTOUR_LENGTH)
 
         fov_label = QtWidgets.QLabel('Field of view:')
@@ -569,7 +569,7 @@ select one of these files when prompted.'''
         self._fov_input = QtWidgets.QLineEdit('0.75')
         self._fov_input.setValidator(QtGui.QDoubleValidator(0.0, 10.0, 3))
         #self._fov_input.setToolTip(self.TIP_FIELD_OF_VIEW)
-        
+
         fov_q = TipLabel(qmark, self.TIP_FIELD_OF_VIEW)
 
         self.buttonbox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok |
@@ -598,32 +598,32 @@ select one of these files when prompted.'''
         view_layout.setColumnStretch(2, 0)
         view_layout.setColumnStretch(3, 10)
         view_layout.addWidget(self.imageTable, 0, 0, 1, 4)
-        
+
         view_layout.addWidget(ml_panel, 1, 0, 1, 4)
-        
+
         view_layout.addWidget(iteration_label_n, 2, 0)
         view_layout.addWidget(self._iteration_input_n, 2, 1)
         view_layout.addWidget(iteration_q_n, 2, 2)
-        
+
         view_layout.addWidget(iter_panel, 3, 0, 1, 4)
-        
+
         tip_label = QtWidgets.QLabel('Press on (?) and hold the mouse\nto read a brief description.')
         tip_label.setAlignment(QtCore.Qt.AlignTop)
         tip_label.setStyleSheet('QLabel {color: gray; margin: 2, 12, 2, 12;}')
         view_layout.addWidget(tip_label, 4, 3, 2, 1)
-        
+
         view_layout.addWidget(cell_contour_length_label, 4, 0)
         view_layout.addWidget(self._cell_contour_length_input, 4, 1)
         view_layout.addWidget(cell_contour_length_q, 4, 2)
-        
+
         view_layout.addWidget(fov_label, 5, 0)
         view_layout.addWidget(self._fov_input, 5, 1)
         view_layout.addWidget(fov_q, 5, 2)
-        
+
         self.defBtn = QtWidgets.QPushButton('Restore Defaults')
         view_layout.addWidget(self.defBtn, 6, 0)
         self.defBtn.clicked.connect(self.restoreDefaults)
-        
+
         view_layout.addWidget(self.buttonbox, 7, 0, 1, 4)
         self.setLayout(view_layout)
         #
@@ -980,9 +980,9 @@ class _crossLabel(QtWidgets.QLabel):
         y0 = self.margin
         y1 = self.height() - self.margin
         h = y1 - y0
-        x = (self.posX - self.rangeX[0]) * w / (self.rangeX[1] - self.rangeX[0]) + x0
+        x = (self.posX - self.rangeX[0]) * w // (self.rangeX[1] - self.rangeX[0]) + x0
         qp.drawLine(x, y0, x, y1)
-        y = h - (self.posY - self.rangeY[0]) * h / (self.rangeY[1] - self.rangeY[0]) + y0
+        y = h - (self.posY - self.rangeY[0]) * h // (self.rangeY[1] - self.rangeY[0]) + y0
         qp.drawLine(x0, y, x1, y)
         #
         qp.end()
@@ -1011,7 +1011,7 @@ class ao_brightness_contrast(QtWidgets.QWidget):
         view_layout.setVerticalSpacing(2)
         self.setLayout(view_layout)
         #
-        for idx, stretch in enumerate((0., 1., 0.)):
+        for idx, stretch in enumerate((0, 1, 0)):
             view_layout.setColumnStretch(idx, stretch)
             view_layout.setRowStretch(idx, stretch)
         #
