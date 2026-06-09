@@ -47,7 +47,7 @@ There are two ways to use the software:
 
    <img src="assets/ConeSegMLSegment3.png" width="860" height="600" />
 
-6. The **Mark**, **Erase S**, **Erase M** and **Undo** buttons allow to add annotations, erase single/multiple annotations and undo past operation.
+6. The **Draw**, **Erase S**, **Erase M** and **Undo** buttons allow to add annotations, erase single/multiple annotations and undo past operation.
 
 7. The **Settings** tab provides options to display the centroids of the cones and also highlight the individual cone regions along with the contours.
 
