@@ -98,6 +98,8 @@ datas = []
 binaries = []
 
 # Main scientific/ML stack.
+# Keep PyQt5 out of the generic data/binary collection path; PyInstaller's Qt hooks
+# should handle Qt frameworks and plugins so the macOS framework layout stays intact.
 for pkg in (
     "tensorflow",
     "keras",
@@ -108,7 +110,6 @@ for pkg in (
     "SimpleITK",
     "itk",
     "vtkmodules",
-    "PyQt5",
 ):
     hiddenimports += safe_extend(collect_submodules, pkg)
     datas += safe_extend(collect_data_files, pkg)
@@ -139,7 +140,6 @@ for dist_name in (
     "itk-io",
     "itk-registration",
     "itk-segmentation",
-    "PyQt5",
     "vtk",
 ):
     try:

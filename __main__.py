@@ -1,11 +1,17 @@
-import os, sys
-from PyQt5 import QtCore, QtGui, QtWidgets
-import AOConfig as cfg
+import multiprocessing as mp
+import os
+import sys
 
-cfg.APP_NAME = 'Cone Segmentation (ML)'
-cfg.APP_VERSION = '1.3.2 (2026-05-12)'
 
-if __name__ == '__main__':
+def main():
+    # Keep application imports after freeze_support(). A child process created by
+    # a frozen executable must not initialize Qt and open another main window.
+    from PyQt5 import QtWidgets
+    import AOConfig as cfg
+
+    cfg.APP_NAME = 'Cone Segmentation (ML)'
+    cfg.APP_VERSION = '1.3.2 (2026-05-12)'
+
     try:
         cdir = os.path.dirname(__file__)
         os.chdir(cdir)
@@ -25,4 +31,9 @@ if __name__ == '__main__':
             csv_filenames = flist.get_files('.csv')
             if len(csv_filenames) > 0:
                 window._open_contour_list(csv_filenames)
-    sys.exit(app.exec_())
+    return app.exec_()
+
+
+if __name__ == '__main__':
+    mp.freeze_support()
+    sys.exit(main())
